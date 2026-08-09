@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OTE Reader — suscripciones a eventos</title>
+<meta name="description" content="PWA experimental para suscribirse a feeds OpenTechEvents, filtrar eventos y guardarlos.">
+<meta name="theme-color" content="#10131a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+<link rel="alternate" type="application/ote+json" title="Demo OTE feed" href="demo-feed.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip" href="#events">Saltar a eventos</a>
+
+<header class="app-header">
+  <a class="brand" href="../">
+    <span class="brand-mark">OTE</span>
+    <span>OpenTechEvents</span>
+  </a>
+  <button class="install-button" type="button" id="install-button" hidden>Instalar</button>
+</header>
+
+<main>
+  <section class="hero">
+    <div>
+      <p class="eyebrow">MVP para asistentes</p>
+      <h1>Suscríbete a comunidades y quédate solo con los eventos que sí te importan.</h1>
+      <p class="lead">Un lector PWA para feeds OTE: añade fuentes, descubre feeds desde una web compatible, guarda filtros y abre cada evento desde su origen.</p>
+    </div>
+    <form class="subscribe-panel" id="subscribe-form">
+      <label for="feed-url">Feed OTE o web con cabecera OTE</label>
+      <div class="url-row">
+        <input id="feed-url" name="url" type="url" placeholder="https://comunidad.example/events.json" autocomplete="url">
+        <button type="submit">Suscribirme</button>
+      </div>
+      <p id="subscribe-help">También funciona con enlaces tipo <code>/attendees/?subscribe=https://...</code>. La autodetección depende de CORS hasta que exista extensión.</p>
+    </form>
+  </section>
+
+  <section class="toolbar" aria-label="Filtros">
+    <div class="field field-wide">
+      <label for="q">Buscar</label>
+      <input id="q" type="search" placeholder="python, málaga, kubernetes...">
+    </div>
+    <div class="field">
+      <label for="mode">Formato</label>
+      <select id="mode">
+        <option value="">Cualquiera</option>
+        <option value="online">Online</option>
+        <option value="in-person">Presencial</option>
+        <option value="hybrid">Híbrido</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="language">Idioma</label>
+      <select id="language">
+        <option value="">Cualquiera</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="country">País</label>
+      <select id="country">
+        <option value="">Cualquiera</option>
+      </select>
+    </div>
+    <label class="check"><input id="cfp" type="checkbox"> CFP abierto</label>
+    <label class="check"><input id="future" type="checkbox" checked> Solo futuros</label>
+    <button class="ghost" type="button" id="save-filter">Guardar filtro</button>
+  </section>
+
+  <section class="workspace">
+    <aside class="sidebar">
+      <div class="side-block">
+        <h2>Feeds</h2>
+        <div id="feeds"></div>
+      </div>
+      <div class="side-block">
+        <h2>Filtros guardados</h2>
+        <div id="saved-filters"></div>
+      </div>
+      <div class="side-block">
+        <h2>Descubrimiento</h2>
+        <p>Para webs OTE, publica en el <code>&lt;head&gt;</code>:</p>
+        <pre><code>&lt;link rel="alternate"
+  type="application/ote+json"
+  href="/events.json"&gt;</code></pre>
+      </div>
+    </aside>
+
+    <section class="events-column" id="events" aria-live="polite">
+      <div class="results-head">
+        <h2 id="result-count">Eventos</h2>
+        <button class="ghost" type="button" id="refresh">Actualizar feeds</button>
+      </div>
+      <div id="messages"></div>
+      <div class="chips" id="tag-cloud"></div>
+      <div class="events" id="event-list"></div>
+    </section>
+  </section>
+</main>
+
+<template id="event-template">
+  <article class="event-card">
+    <div class="event-date"></div>
+    <div class="event-body">
+      <div class="event-topline"></div>
+      <h3></h3>
+      <p class="event-description"></p>
+      <div class="event-meta"></div>
+      <div class="event-tags"></div>
+      <div class="event-actions">
+        <a class="primary-link" target="_blank" rel="noopener">Abrir origen</a>
+        <button type="button" class="save-event">Guardar</button>
+        <button type="button" class="calendar-event">.ics</button>
+      </div>
+    </div>
+  </article>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "ote-reader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Attendee-facing PWA for subscribing to OpenTechEvents feeds.",
+  "scripts": {
+    "dev": "node scripts/serve.cjs",
+    "check": "node --check app.js"
+  },
+  "license": "MIT"
+}
