@@ -29,5 +29,5 @@ Communities can expose their OTE feed from a website with:
 They can also link directly to the reader with:
 
 ```text
-https://reader.opentechevents.org/?subscribe=https://example.org/events.json
+https://opentechevents.github.io/ote-reader/?subscribe=https://example.org/events.json
 ```
