@@ -7,7 +7,8 @@
     feeds: [],
     filters: { q: '', mode: '', language: '', country: '', cfp: false, future: true },
     savedFilters: [],
-    savedEvents: []
+    savedEvents: [],
+    view: 'cards'
   };
   var feedCache = new Map();
   var deferredInstall = null;
@@ -17,12 +18,18 @@
   function loadState() {
     try {
       var saved = JSON.parse(localStorage.getItem(STORAGE));
-      if (saved && typeof saved === 'object') state = Object.assign(state, saved);
+      if (saved && typeof saved === 'object') {
+        state = Object.assign(state, saved);
+        state.filters = Object.assign({ q: '', mode: '', language: '', country: '', cfp: false, future: true }, state.filters || {});
+        state.savedFilters = state.savedFilters || [];
+        state.savedEvents = state.savedEvents || [];
+        state.view = state.view || 'cards';
+      }
     } catch (e) {
       showMessage('No se pudo leer el estado guardado. Se usará una sesión limpia.', 'warn');
     }
     if (!state.feeds.length) {
-      state.feeds.push({ url: DEFAULT_FEED, title: 'Feed demo para asistentes', status: 'pending' });
+      state.feeds.push({ url: DEFAULT_FEED, title: 'Feed demo', status: 'pending' });
     }
   }
 
@@ -57,6 +64,10 @@
     if (!raw) return null;
     if (raw.indexOf('T') === -1) return new Date(raw + 'T00:00:00');
     return new Date(raw);
+  }
+
+  function updatedAsDate(event) {
+    return event.updatedAt ? new Date(event.updatedAt) : startAsDate(event);
   }
 
   function locationText(event) {
@@ -130,7 +141,7 @@
       }
       doc = await response.json();
       var normalised = normaliseDocument(doc, feed.url);
-      feed.title = normalised.title;
+      feed.title = feed.customTitle || normalised.title;
       feed.status = 'ok';
       feed.updatedAt = normalised.updatedAt || '';
       feedCache.set(feed.url, normalised);
@@ -184,11 +195,15 @@
   }
 
   function filteredEvents() {
-    return allEvents()
-      .filter(matches)
-      .sort(function (a, b) {
-        return (startAsDate(a) || 0) - (startAsDate(b) || 0);
+    var events = allEvents().filter(matches);
+    if (state.view === 'feed') {
+      return events.sort(function (a, b) {
+        return (updatedAsDate(b) || 0) - (updatedAsDate(a) || 0);
       });
+    }
+    return events.sort(function (a, b) {
+      return (startAsDate(a) || 0) - (startAsDate(b) || 0);
+    });
   }
 
   function render() {
@@ -206,6 +221,10 @@
     $('country').value = state.filters.country;
     $('cfp').checked = state.filters.cfp;
     $('future').checked = state.filters.future;
+    document.querySelectorAll('[data-view]').forEach(function (button) {
+      button.classList.toggle('is-active', button.dataset.view === state.view);
+      button.setAttribute('aria-pressed', String(button.dataset.view === state.view));
+    });
   }
 
   function renderFeeds() {
@@ -217,21 +236,39 @@
       var body = document.createElement('div');
       body.innerHTML = '<div class="feed-title"></div><div class="feed-meta"></div>';
       body.querySelector('.feed-title').textContent = feed.title || 'Feed OTE';
-      var meta = feed.status === 'error' ? feed.error : feed.url;
-      body.querySelector('.feed-meta').textContent = feed.status + ' · ' + meta;
-      var remove = document.createElement('button');
-      remove.className = 'remove';
-      remove.type = 'button';
-      remove.textContent = 'Quitar';
-      remove.addEventListener('click', function () {
-        feedCache.delete(feed.url);
-        state.feeds.splice(index, 1);
-        persist();
-        render();
-      });
-      row.append(body, remove);
+      body.querySelector('.feed-meta').textContent = feed.status === 'error' ? feed.error : compactUrl(feed.url);
+      row.appendChild(body);
+
+      var menu = document.createElement('button');
+      menu.className = 'icon-button small';
+      menu.type = 'button';
+      menu.textContent = '...';
+      menu.setAttribute('aria-label', 'Opciones de ' + (feed.title || 'feed'));
+      menu.addEventListener('click', function () { feedMenu(feed, index); });
+      row.appendChild(menu);
       box.appendChild(row);
     });
+  }
+
+  function feedMenu(feed, index) {
+    var choice = prompt('Opciones: escribe "renombrar", "actualizar" o "eliminar".', 'renombrar');
+    if (!choice) return;
+    choice = choice.trim().toLowerCase();
+    if (choice === 'renombrar') {
+      var name = prompt('Nombre de la suscripción', feed.title || '');
+      if (!name) return;
+      feed.customTitle = name.trim();
+      feed.title = feed.customTitle;
+    } else if (choice === 'actualizar') {
+      loadFeed(feed);
+      return;
+    } else if (choice === 'eliminar') {
+      if (!confirm('Eliminar esta suscripción?')) return;
+      feedCache.delete(feed.url);
+      state.feeds.splice(index, 1);
+    }
+    persist();
+    render();
   }
 
   function renderSavedFilters() {
@@ -239,7 +276,8 @@
     box.replaceChildren();
     if (!state.savedFilters.length) {
       var empty = document.createElement('p');
-      empty.textContent = 'Guarda combinaciones como "CFPs en España" o "online + Kubernetes".';
+      empty.className = 'muted-small';
+      empty.textContent = 'Sin filtros guardados.';
       box.appendChild(empty);
       return;
     }
@@ -247,7 +285,7 @@
       var row = document.createElement('div');
       row.className = 'saved-row';
       var body = document.createElement('button');
-      body.className = 'ghost';
+      body.className = 'saved-filter';
       body.type = 'button';
       body.textContent = saved.name;
       body.addEventListener('click', function () {
@@ -255,16 +293,19 @@
         persist();
         render();
       });
-      var remove = document.createElement('button');
-      remove.className = 'remove';
-      remove.type = 'button';
-      remove.textContent = 'Quitar';
-      remove.addEventListener('click', function () {
-        state.savedFilters.splice(index, 1);
-        persist();
-        renderSavedFilters();
+      var menu = document.createElement('button');
+      menu.className = 'icon-button small';
+      menu.type = 'button';
+      menu.textContent = '...';
+      menu.setAttribute('aria-label', 'Opciones de filtro');
+      menu.addEventListener('click', function () {
+        if (confirm('Eliminar este filtro?')) {
+          state.savedFilters.splice(index, 1);
+          persist();
+          renderSavedFilters();
+        }
       });
-      row.append(body, remove);
+      row.append(body, menu);
       box.appendChild(row);
     });
   }
@@ -273,7 +314,7 @@
     var events = allEvents();
     fillSelect('language', unique(events.flatMap(function (e) { return e.languages || []; })), 'Cualquiera');
     fillSelect('country', unique(events.map(countryOf).filter(Boolean)), 'Cualquiera');
-    var tags = unique(events.flatMap(function (e) { return e.tags || []; })).slice(0, 18);
+    var tags = unique(events.flatMap(function (e) { return e.tags || []; })).slice(0, 14);
     var cloud = $('tag-cloud');
     cloud.replaceChildren();
     tags.forEach(function (tag) {
@@ -309,14 +350,37 @@
   function renderEvents() {
     var list = $('event-list');
     var events = filteredEvents();
+    list.className = 'events view-' + state.view;
     list.replaceChildren();
     $('result-count').textContent = events.length + (events.length === 1 ? ' evento' : ' eventos');
     if (!events.length) {
-      showMessage('No hay eventos con esos filtros. Prueba a desactivar "Solo futuros" o añade otro feed.', 'warn', true);
+      showMessage('No hay eventos con esos filtros.', 'warn', true);
       return;
     }
     clearMessages();
-    events.forEach(function (event) { list.appendChild(renderEvent(event)); });
+    if (state.view === 'calendar') renderCalendar(events, list);
+    else events.forEach(function (event) { list.appendChild(renderEvent(event)); });
+  }
+
+  function renderCalendar(events, list) {
+    var groups = {};
+    events.forEach(function (event) {
+      var date = startAsDate(event);
+      var key = date ? date.toLocaleDateString('es', { month: 'long', year: 'numeric' }) : 'Sin fecha';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(event);
+    });
+    Object.keys(groups).forEach(function (key) {
+      var group = document.createElement('section');
+      group.className = 'calendar-group';
+      var title = document.createElement('h3');
+      title.textContent = key;
+      group.appendChild(title);
+      groups[key].forEach(function (event) {
+        group.appendChild(renderEvent(event));
+      });
+      list.appendChild(group);
+    });
   }
 
   function renderEvent(event) {
@@ -327,12 +391,14 @@
     tpl.querySelector('.event-date').innerHTML = date
       ? '<span>' + date.toLocaleString('es', { month: 'short' }) + '</span>' + date.getDate()
       : '<span>sin</span>fecha';
-    tpl.querySelector('.event-topline').textContent = [event._feedTitle, organizerText(event)].filter(Boolean).join(' · ');
+    tpl.querySelector('.event-topline').textContent = state.view === 'feed'
+      ? 'Actualizado ' + formatUpdated(event) + ' · ' + event._feedTitle
+      : [event._feedTitle, organizerText(event)].filter(Boolean).join(' · ');
     tpl.querySelector('h3').textContent = event.name;
-    tpl.querySelector('.event-description').textContent = event.description || 'Sin descripción en el feed.';
+    tpl.querySelector('.event-description').appendChild(markdown(event.description || 'Sin descripción en el feed.'));
     tpl.querySelector('.event-meta').textContent = [
       formatDate(event),
-      event.attendanceMode || '',
+      labelMode(event.attendanceMode),
       locationText(event),
       (event.languages || []).join(', ')
     ].filter(Boolean).join(' · ');
@@ -363,11 +429,78 @@
     return tpl;
   }
 
+  function markdown(text) {
+    var fragment = document.createDocumentFragment();
+    var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    var list = null;
+
+    lines.forEach(function (line) {
+      var match = line.match(/^\s*[-*]\s+(.+)/);
+      if (match) {
+        if (!list) {
+          list = document.createElement('ul');
+          fragment.appendChild(list);
+        }
+        var li = document.createElement('li');
+        appendInline(li, match[1]);
+        list.appendChild(li);
+        return;
+      }
+      list = null;
+      if (!line.trim()) return;
+      var p = document.createElement('p');
+      appendInline(p, line);
+      fragment.appendChild(p);
+    });
+
+    if (!fragment.childNodes.length) {
+      var empty = document.createElement('p');
+      empty.textContent = '';
+      fragment.appendChild(empty);
+    }
+    return fragment;
+  }
+
+  function appendInline(parent, text) {
+    var pattern = /(\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
+    var last = 0;
+    var match;
+    while ((match = pattern.exec(text))) {
+      if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+      if (match[2] && match[3]) {
+        var a = document.createElement('a');
+        a.href = match[3];
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = match[2];
+        parent.appendChild(a);
+      } else if (match[4]) {
+        var strong = document.createElement('strong');
+        strong.textContent = match[4];
+        parent.appendChild(strong);
+      } else if (match[5]) {
+        var em = document.createElement('em');
+        em.textContent = match[5];
+        parent.appendChild(em);
+      } else if (match[6]) {
+        var code = document.createElement('code');
+        code.textContent = match[6];
+        parent.appendChild(code);
+      }
+      last = pattern.lastIndex;
+    }
+    if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+
   function pill(text, kind) {
     var span = document.createElement('span');
     span.className = 'pill ' + kind;
     span.textContent = text;
     return span;
+  }
+
+  function labelMode(mode) {
+    return { online: 'Online', 'in-person': 'Presencial', hybrid: 'Híbrido' }[mode] || mode || '';
   }
 
   function formatDate(event) {
@@ -379,11 +512,25 @@
     return date.toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' }) + ' · ' + event.timezone;
   }
 
+  function formatUpdated(event) {
+    var date = updatedAsDate(event);
+    return date ? date.toLocaleDateString('es', { dateStyle: 'medium' }) : 'sin fecha';
+  }
+
+  function compactUrl(url) {
+    try {
+      var parsed = new URL(url);
+      return parsed.hostname + parsed.pathname.replace(/\/$/, '');
+    } catch (e) {
+      return url;
+    }
+  }
+
   function downloadIcs(event) {
     var ics = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//OpenTechEvents//OTE Reader MVP//ES',
+      'PRODID:-//OpenTechEvents//OTE Reader//ES',
       'BEGIN:VEVENT',
       'UID:' + escapeIcs(event.id),
       'SUMMARY:' + escapeIcs(event.name),
@@ -443,15 +590,46 @@
     loadFeed(feed);
   }
 
+  function openModal(id) {
+    var modal = $(id);
+    if (modal.showModal) modal.showModal();
+    else modal.setAttribute('open', '');
+  }
+
+  function closeModal(id) {
+    var modal = $(id);
+    if (modal.close) modal.close();
+    else modal.removeAttribute('open');
+  }
+
   function bind() {
+    $('subscribe-open').addEventListener('click', function () { openModal('subscribe-modal'); });
+    $('subscribe-open-side').addEventListener('click', function () { openModal('subscribe-modal'); });
+    $('help-open').addEventListener('click', function () { openModal('help-modal'); });
+    document.querySelectorAll('[data-close]').forEach(function (button) {
+      button.addEventListener('click', function () { closeModal(button.dataset.close); });
+    });
+    document.querySelectorAll('.modal').forEach(function (modal) {
+      modal.addEventListener('click', function (event) {
+        if (event.target === modal) closeModal(modal.id);
+      });
+    });
     $('subscribe-form').addEventListener('submit', function (event) {
       event.preventDefault();
       subscribe($('feed-url').value);
       $('feed-url').value = '';
+      closeModal('subscribe-modal');
     });
     ['q', 'mode', 'language', 'country', 'cfp', 'future'].forEach(function (id) {
       $(id).addEventListener('input', function () {
         state.filters[id] = this.type === 'checkbox' ? this.checked : this.value;
+        persist();
+        render();
+      });
+    });
+    document.querySelectorAll('[data-view]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.view = button.dataset.view;
         persist();
         render();
       });
