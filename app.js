@@ -332,10 +332,11 @@
     box.appendChild(libraryRow({
       title: 'All',
       meta: '',
-      count: sourceCount({ type: 'all', id: 'all' }),
+      count: visibleUnreadCount({ type: 'all', id: 'all' }),
       active: isActiveSource('all', 'all'),
       onClick: function () { setActiveSource('all', 'all'); closeSidebar(); },
       className: 'library-all',
+      menu: function (event) { openContextMenu(event, { type: 'all', id: 'all' }); },
       context: { type: 'all', id: 'all' }
     }));
 
@@ -343,13 +344,13 @@
       box.appendChild(libraryRow({
         title: category.name,
         meta: '',
-        count: sourceCount({ type: 'category', id: category.id }),
+        count: visibleUnreadCount({ type: 'category', id: category.id }),
         active: isActiveSource('category', category.id),
         unread: categoryHasUnread(category),
         onClick: function () { setActiveSource('category', category.id); closeSidebar(); },
         className: 'category-row',
         menu: function (event) { openContextMenu(event, { type: 'category', id: category.id }); },
-        chevron: category.open !== false ? '⌄' : '›',
+        chevron: category.open !== false ? '▾' : '▸',
         onChevron: function () { toggleCategory(category); },
         editing: editingCategoryId === category.id,
         onRename: function (name) { finishCategoryRename(category, name); },
@@ -365,7 +366,7 @@
           box.appendChild(libraryRow({
             title: feed.title || 'Feed OTE',
             meta: feed.status === 'error' ? feed.error : '',
-            count: sourceCount({ type: 'feed', id: feed.url }),
+            count: visibleUnreadCount({ type: 'feed', id: feed.url }),
             active: isActiveSource('feed', feed.url),
             unread: feedHasUnread(feed),
             onClick: function () { setActiveSource('feed', feed.url); closeSidebar(); },
@@ -382,6 +383,7 @@
   function libraryRow(options) {
     var row = document.createElement('div');
     row.className = 'library-row ' + (options.className || '') + (options.active ? ' is-active' : '');
+    if (options.chevron) row.classList.add('has-chevron');
     if (options.context) {
       row.addEventListener('contextmenu', function (event) {
         event.preventDefault();
@@ -421,7 +423,7 @@
       chevron.className = 'chevron-button';
       chevron.type = 'button';
       chevron.textContent = options.chevron;
-      chevron.setAttribute('aria-label', options.chevron === '›' ? 'Expandir folder' : 'Plegar folder');
+      chevron.setAttribute('aria-label', options.chevron === '▸' ? 'Expandir folder' : 'Plegar folder');
       chevron.addEventListener('click', function (event) {
         event.stopPropagation();
         options.onChevron();
@@ -457,12 +459,6 @@
     meta.textContent = options.meta || '';
     body.append(title, meta);
     main.appendChild(body);
-    if (options.count != null) {
-      var count = document.createElement('span');
-      count.className = 'library-count';
-      count.textContent = String(options.count);
-      main.appendChild(count);
-    }
     row.appendChild(main);
     if (options.menu) {
       var menu = document.createElement('button');
@@ -475,6 +471,12 @@
         options.menu(event);
       });
       row.appendChild(menu);
+    }
+    if (options.count != null) {
+      var count = document.createElement('span');
+      count.className = 'library-count';
+      count.textContent = String(options.count);
+      row.appendChild(count);
     }
     return row;
   }
@@ -524,6 +526,38 @@
       return allEvents().filter(function (event) { return urls.has(event._feedUrl); }).length;
     }
     return 0;
+  }
+
+  function visibleUnreadCount(source) {
+    var count = unreadCount(source);
+    return count > 0 ? count : null;
+  }
+
+  function unreadCount(source) {
+    if (!source || source.type === 'all') {
+      return state.feeds.reduce(function (sum, feed) { return sum + unreadFeedCount(feed); }, 0);
+    }
+    if (source.type === 'feed') return unreadFeedCount(findFeed(source.id));
+    if (source.type === 'category') {
+      var category = findCategory(source.id);
+      return (category ? category.feedUrls || [] : []).reduce(function (sum, url) {
+        return sum + unreadFeedCount(findFeed(url));
+      }, 0);
+    }
+    return 0;
+  }
+
+  function unreadFeedCount(feed) {
+    if (!feed || feed.status !== 'ok') return 0;
+    var cached = feedCache.get(feed.url);
+    var events = cached ? cached.events || [] : [];
+    if (!events.length) return feedHasUnread(feed) ? 1 : 0;
+    if (!feed.lastSeenAt) return events.length;
+    var seenAt = new Date(feed.lastSeenAt);
+    return events.filter(function (event) {
+      var activity = event.updatedAt ? new Date(event.updatedAt) : null;
+      return activity && !Number.isNaN(activity.getTime()) && activity > seenAt;
+    }).length;
   }
 
   function openFeedOptions(feed) {
@@ -607,6 +641,7 @@
     if (context.type === 'all') {
       return [
         { icon: '✓', label: 'Mark as Read', action: markVisibleFeedsRead },
+        { icon: '+', label: 'Create New Folder', action: createFolder },
         { icon: '↻', label: 'Refresh feeds', action: function () { state.feeds.forEach(loadFeed); } },
         { icon: '⚙', label: 'Manage Feeds', action: openSources }
       ];
@@ -1194,13 +1229,9 @@
   function bind() {
     $('subscribe-open-side').addEventListener('click', function () { openModal('subscribe-modal'); });
     $('find-sources-open').addEventListener('click', openSources);
-    $('folder-create').addEventListener('click', createFolder);
     $('sidebar-toggle').addEventListener('click', toggleSidebar);
     $('sidebar-collapse').addEventListener('click', toggleSidebar);
-    $('sidebar-more').addEventListener('click', function (event) {
-      event.stopPropagation();
-      openContextMenu(event, { type: 'all', id: 'all' });
-    });
+    $('sidebar-restore').addEventListener('click', toggleSidebar);
     $('sidebar-scrim').addEventListener('click', closeSidebar);
     $('theme-toggle').addEventListener('click', toggleTheme);
     $('app-width').addEventListener('change', function () {
