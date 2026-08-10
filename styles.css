@@ -778,6 +778,21 @@ label {
   display: grid;
   gap: 12px;
 }
+.reader-events {
+  display: block;
+  --ote-font-family: var(--sans);
+  --ote-font-size: .94rem;
+  --ote-surface: var(--panel);
+  --ote-border: var(--line);
+  --ote-text: var(--ink);
+  --ote-muted: var(--muted);
+  --ote-accent: var(--accent);
+  --ote-accent-hover: var(--accent-strong);
+  --ote-accent-soft: var(--accent-soft);
+  --ote-error: var(--danger);
+  --ote-error-bg: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  --ote-radius: 8px;
+}
 .view-cards {
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }

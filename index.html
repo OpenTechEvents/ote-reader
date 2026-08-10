@@ -129,7 +129,7 @@
         </div>
       </div>
       <div id="messages"></div>
-      <div class="events" id="event-list"></div>
+      <ote-events class="reader-events" id="event-list" lang="es" sort="none" event-actions="none"></ote-events>
     </section>
   </section>
   <div class="scrim" id="sidebar-scrim" hidden></div>
@@ -231,24 +231,7 @@
   </section>
 </dialog>
 
-<template id="event-template">
-  <article class="event-card">
-    <div class="event-date"></div>
-    <div class="event-body">
-      <div class="event-topline"></div>
-      <h3></h3>
-      <div class="event-description"></div>
-      <div class="event-meta"></div>
-      <div class="event-tags"></div>
-      <div class="event-actions">
-        <a class="primary-link" target="_blank" rel="noopener">Abrir origen</a>
-        <button type="button" class="save-event">Favorito</button>
-        <button type="button" class="calendar-event">.ics</button>
-      </div>
-    </div>
-  </article>
-</template>
-
+<script type="module" src="https://tools.opentechevents.org/embed/v0.3.0/ote-events.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

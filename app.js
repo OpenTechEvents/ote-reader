@@ -34,6 +34,7 @@
   var optionsContext = null;
   var editingCategoryId = null;
   var boardEventContext = null;
+  var embedReady = false;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -46,6 +47,7 @@
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
+    if ($('event-list')) $('event-list').setAttribute('theme', theme);
     var dark = theme === 'dark';
     var toggle = $('theme-toggle');
     if (toggle) {
@@ -1079,83 +1081,71 @@
   }
 
   function renderEvents() {
-    var list = $('event-list');
+    var widget = $('event-list');
     var events = filteredEvents();
-    list.className = 'events view-' + state.view;
-    list.replaceChildren();
     $('result-count').textContent = sourceLabel() + ' · ' + events.length + (events.length === 1 ? ' evento' : ' eventos');
     if (!events.length) {
+      widget.events = [];
+      widget.setAttribute('empty-message', 'No hay eventos con esos filtros.');
       showMessage('No hay eventos con esos filtros.', 'warn', true);
       return;
     }
     clearMessages();
-    if (state.view === 'calendar') renderCalendar(events, list);
-    else events.forEach(function (event) { list.appendChild(renderEvent(event)); });
+    if (!embedReady) {
+      showMessage('El visor de eventos se está cargando...', 'warn', true);
+      return;
+    }
+    widget.setAttribute('layout', state.view === 'feed' ? 'list' : state.view);
+    widget.setAttribute('theme', document.documentElement.dataset.theme || 'light');
+    widget.setAttribute('fields', 'image,when,location,attendance,description,price,tags,organizer');
+    widget.setAttribute('show-past', 'true');
+    widget.setAttribute('sort', 'none');
+    widget.setAttribute('event-actions', 'none');
+    widget.setAttribute('empty-message', 'No hay eventos con esos filtros.');
+    widget.events = events;
+    widget.eventActions = function (context) {
+      var event = context.originalEvent;
+      if (!event) return [];
+      var saved = state.boards.some(function (board) { return boardHasEvent(board, event); });
+      return [
+        {
+          id: 'save-to-collection',
+          label: saved ? 'En colección' : 'Guardar',
+          icon: saved ? 'bookmark' : 'star',
+          pressed: saved,
+          placement: 'both',
+          onClick: function (_previewEvent, actionContext) {
+            if (actionContext.originalEvent) openBoardPicker(actionContext.originalEvent);
+          }
+        },
+        { type: 'link', placement: 'detail' },
+        { type: 'ics', placement: 'detail' }
+      ];
+    };
+    widget.eventClassName = function (context) {
+      var event = context.originalEvent;
+      return [
+        event && event.status === 'cancelled' ? 'reader-cancelled' : '',
+        event && eventIsUnread(event) ? 'reader-unread' : 'reader-read'
+      ].filter(Boolean);
+    };
+    widget.eventBadges = function (context) {
+      var event = context.originalEvent;
+      if (!event) return [];
+      var badges = [];
+      if (event._feedTitle) badges.push({ label: event._feedTitle, icon: 'folder' });
+      if (cfpIsOpen(event)) badges.push({ label: 'CFP abierto', icon: 'check', tone: 'success' });
+      if (event.status === 'cancelled') badges.push({ label: 'Cancelado', tone: 'warning' });
+      return badges;
+    };
   }
 
-  function renderCalendar(events, list) {
-    var groups = {};
-    events.forEach(function (event) {
-      var date = startAsDate(event);
-      var key = date ? date.toLocaleDateString('es', { month: 'long', year: 'numeric' }) : 'Sin fecha';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(event);
-    });
-    Object.keys(groups).forEach(function (key) {
-      var group = document.createElement('section');
-      group.className = 'calendar-group';
-      var title = document.createElement('h3');
-      title.textContent = key;
-      group.appendChild(title);
-      groups[key].forEach(function (event) {
-        group.appendChild(renderEvent(event));
-      });
-      list.appendChild(group);
-    });
-  }
-
-  function renderEvent(event) {
-    var tpl = $('event-template').content.cloneNode(true);
-    var card = tpl.querySelector('.event-card');
-    if (event.status === 'cancelled') card.classList.add('is-cancelled');
-    var date = startAsDate(event);
-    tpl.querySelector('.event-date').innerHTML = date
-      ? '<span>' + date.toLocaleString('es', { month: 'short' }) + '</span>' + date.getDate()
-      : '<span>sin</span>fecha';
-    tpl.querySelector('.event-topline').textContent = state.view === 'feed'
-      ? 'Actualizado ' + formatUpdated(event) + ' · ' + event._feedTitle
-      : [event._feedTitle, organizerText(event)].filter(Boolean).join(' · ');
-    tpl.querySelector('h3').textContent = event.name;
-    tpl.querySelector('.event-description').appendChild(markdown(event.description || 'Sin descripción en el feed.'));
-    tpl.querySelector('.event-meta').textContent = [
-      formatDate(event),
-      labelMode(event.attendanceMode),
-      locationText(event),
-      (event.languages || []).join(', ')
-    ].filter(Boolean).join(' · ');
-    var tags = tpl.querySelector('.event-tags');
-    (event.tags || []).forEach(function (tag) {
-      var item = document.createElement('span');
-      item.className = 'tag';
-      item.textContent = '#' + tag;
-      tags.appendChild(item);
-    });
-    if (cfpIsOpen(event)) tags.appendChild(pill('CFP abierto', 'ok'));
-    if (event.status === 'cancelled') tags.appendChild(pill('Cancelado', 'warn'));
-    var link = tpl.querySelector('.primary-link');
-    link.href = event.url || event.cfp && event.cfp.url || event._feedUrl || event.id;
-    var save = tpl.querySelector('.save-event');
-    var saved = state.boards.some(function (board) { return boardHasEvent(board, event); });
-    save.textContent = saved ? 'En colección' : 'Favorito';
-    save.classList.toggle('is-active', saved);
-    save.setAttribute('aria-pressed', String(saved));
-    save.addEventListener('click', function () {
-      openBoardPicker(event);
-    });
-    tpl.querySelector('.calendar-event').addEventListener('click', function () {
-      downloadIcs(event);
-    });
-    return tpl;
+  function eventIsUnread(event) {
+    var feed = event && findFeed(event._feedUrl);
+    if (!feed || feed.status !== 'ok') return false;
+    if (!feed.lastSeenAt) return true;
+    var activity = event.updatedAt ? new Date(event.updatedAt) : null;
+    return Boolean(activity && !Number.isNaN(activity.getTime()) && activity > new Date(feed.lastSeenAt));
   }
 
   function openBoardPicker(event) {
@@ -1638,11 +1628,28 @@
     loadState();
     bind();
     updateInstallUi();
+    await waitForEmbed();
     render();
     applySubscribeParam();
     await Promise.all(state.feeds.map(loadFeed));
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+  }
+
+  async function waitForEmbed() {
+    if (!window.customElements || !customElements.whenDefined) return;
+    try {
+      await Promise.race([
+        customElements.whenDefined('ote-events'),
+        new Promise(function (_, reject) {
+          setTimeout(function () { reject(new Error('timeout')); }, 6000);
+        })
+      ]);
+      embedReady = true;
+    } catch (e) {
+      embedReady = false;
+      showMessage('No se pudo cargar el componente de visualización OTE.', 'warn', true);
     }
   }
 
