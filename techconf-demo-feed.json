@@ -1,0 +1,63 @@
+{
+  "specVersion": "0.3.0",
+  "title": "TechConf España demo",
+  "description": "Feed OTE simulado para mostrar cómo un directorio de conferencias como techconf.es podría ser una fuente dentro de OTE Reader.",
+  "url": "http://techconf.es/",
+  "textLanguage": "es",
+  "license": "CC-BY-4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+  "updatedAt": "2026-08-10T09:30:00Z",
+  "events": [
+    {
+      "id": "http://techconf.es/demo/2026-11-frontend-summit",
+      "url": "http://techconf.es/",
+      "name": "Frontend Summit Iberia 2026",
+      "description": "Conferencia simulada publicada por un directorio OTE. Programa centrado en performance, diseño de componentes y accesibilidad.",
+      "organizers": [
+        { "name": "TechConf España", "url": "http://techconf.es/" }
+      ],
+      "startDate": "2026-11-06",
+      "endDate": "2026-11-07",
+      "timezone": "Europe/Madrid",
+      "attendanceMode": "hybrid",
+      "location": {
+        "venue": "Barcelona Tech Campus",
+        "address": {
+          "locality": "Barcelona",
+          "country": "ES"
+        },
+        "onlineUrl": "http://techconf.es/"
+      },
+      "tags": ["frontend", "web", "conference", "accessibility"],
+      "languages": ["es", "en"],
+      "cfp": {
+        "url": "http://techconf.es/",
+        "closesAt": "2026-09-20T23:59:59+02:00"
+      },
+      "updatedAt": "2026-08-10T09:30:00Z"
+    },
+    {
+      "id": "http://techconf.es/demo/2026-12-platform-engineering",
+      "url": "http://techconf.es/",
+      "name": "Platform Engineering Day",
+      "description": "Evento simulado para equipos que construyen plataformas internas, developer portals y automatización de despliegues.",
+      "organizers": [
+        { "name": "TechConf España", "url": "http://techconf.es/" }
+      ],
+      "startDate": "2026-12-03T09:30",
+      "endDate": "2026-12-03T18:00",
+      "timezone": "Europe/Madrid",
+      "attendanceMode": "in-person",
+      "location": {
+        "venue": "La Nave",
+        "address": {
+          "locality": "Madrid",
+          "country": "ES"
+        }
+      },
+      "tags": ["platform", "devops", "developer-experience"],
+      "languages": ["es"],
+      "updatedAt": "2026-08-10T09:30:00Z"
+    }
+  ]
+}

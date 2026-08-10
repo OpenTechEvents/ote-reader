@@ -1,0 +1,54 @@
+{
+  "specVersion": "0.3.0",
+  "title": "Eventos Wiki demo",
+  "description": "Feed OTE simulado para mostrar cómo un directorio como eventos.wiki podría complementar OTE Reader.",
+  "url": "https://eventos.wiki/",
+  "textLanguage": "es",
+  "license": "CC-BY-4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+  "updatedAt": "2026-08-10T09:00:00Z",
+  "events": [
+    {
+      "id": "https://eventos.wiki/demo/2026-09-open-source-madrid",
+      "url": "https://eventos.wiki/",
+      "name": "Open Source Madrid: mantenibilidad y comunidades",
+      "description": "Evento simulado procedente de un directorio OTE. Incluye charlas cortas sobre gobernanza, documentación y sostenibilidad de proyectos abiertos.",
+      "organizers": [
+        { "name": "Eventos Wiki", "url": "https://eventos.wiki/" }
+      ],
+      "startDate": "2026-09-12T10:00",
+      "endDate": "2026-09-12T14:00",
+      "timezone": "Europe/Madrid",
+      "attendanceMode": "in-person",
+      "location": {
+        "venue": "Madrid Innovation Lab",
+        "address": {
+          "locality": "Madrid",
+          "country": "ES"
+        }
+      },
+      "tags": ["opensource", "community", "documentation"],
+      "languages": ["es"],
+      "updatedAt": "2026-08-10T09:00:00Z"
+    },
+    {
+      "id": "https://eventos.wiki/demo/2026-10-data-viz-online",
+      "url": "https://eventos.wiki/",
+      "name": "Visualización de datos para comunidades técnicas",
+      "description": "Sesión online simulada para explorar dashboards ligeros, storytelling con datos y publicación abierta de recursos.",
+      "organizers": [
+        { "name": "Eventos Wiki", "url": "https://eventos.wiki/" }
+      ],
+      "startDate": "2026-10-02T18:00",
+      "endDate": "2026-10-02T19:30",
+      "timezone": "Europe/Madrid",
+      "attendanceMode": "online",
+      "location": {
+        "onlineUrl": "https://eventos.wiki/"
+      },
+      "tags": ["data", "visualization", "online"],
+      "languages": ["es"],
+      "updatedAt": "2026-08-10T09:00:00Z"
+    }
+  ]
+}

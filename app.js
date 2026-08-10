@@ -6,13 +6,22 @@
   var THEME_STORAGE = 'ote-reader-theme-v1';
   var WIDTH_STORAGE = 'ote-reader-width-v1';
   var ADOPTERS_URL = 'https://opentechevents.org/data/adopters.json';
-  var DEFAULT_FEED = new URL('demo-feed.json', location.href).href;
+  var DEFAULT_FEEDS = [
+    { url: new URL('demo-feed.json', location.href).href, title: 'Feed demo' }
+  ];
+  var DIRECTORY_DEMO_FEEDS = [
+    { url: new URL('eventos-wiki-demo-feed.json', location.href).href, title: 'Eventos Wiki demo' },
+    { url: new URL('techconf-demo-feed.json', location.href).href, title: 'TechConf España demo' }
+  ];
+  var DIRECTORY_FOLDER = 'Directorios OTE';
   var DEFAULT_FOLDERS = ['Conferencias', 'Eventos Almería', 'CFP para charlas'];
-  var FOLDER_EXAMPLES = DEFAULT_FOLDERS.concat(['Meetups locales', 'Online', 'Eventos para juniors']);
+  var FOLDER_EXAMPLES = DEFAULT_FOLDERS.concat(['Feeds de directorios OTE', 'Meetups locales', 'Online', 'Eventos para juniors']);
   var state = {
     feeds: [],
     categories: [],
+    boards: [],
     folderTemplatesAdded: false,
+    directorySamplesAdded: false,
     activeSource: { type: 'all', id: 'all' },
     filters: { q: '', mode: '', language: '', country: '', cfp: false, future: true },
     savedFilters: [],
@@ -24,6 +33,7 @@
   var deferredInstall = null;
   var optionsContext = null;
   var editingCategoryId = null;
+  var boardEventContext = null;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -72,7 +82,9 @@
         state = Object.assign(state, saved);
         state.filters = Object.assign({ q: '', mode: '', language: '', country: '', cfp: false, future: true }, state.filters || {});
         state.categories = state.categories || [];
+        state.boards = state.boards || [];
         state.folderTemplatesAdded = Boolean(state.folderTemplatesAdded);
+        state.directorySamplesAdded = Boolean(state.directorySamplesAdded);
         state.activeSource = state.activeSource || { type: 'all', id: 'all' };
         state.savedFilters = state.savedFilters || [];
         state.savedEvents = state.savedEvents || [];
@@ -83,10 +95,26 @@
       showMessage('No se pudo leer el estado guardado. Se usará una sesión limpia.', 'warn');
     }
     if (!state.feeds.length) {
-      state.feeds.push({ url: DEFAULT_FEED, title: 'Feed demo', status: 'pending' });
+      DEFAULT_FEEDS.forEach(function (feed) {
+        state.feeds.push({ url: feed.url, title: feed.title, status: 'pending' });
+      });
     }
     migrateCategories();
+    seedDirectoryDemoFeeds();
+    migrateBoards();
     persist();
+  }
+
+  function migrateBoards() {
+    if (!state.boards.length) {
+      state.boards.push({ id: 'favorites', name: 'Favorites', eventRefs: [] });
+    }
+    if (!state.boards.some(function (board) { return board.id === 'my-talks'; })) {
+      state.boards.push({ id: 'my-talks', name: 'Mis charlas', eventRefs: [] });
+    }
+    state.boards.forEach(function (board) {
+      board.eventRefs = board.eventRefs || [];
+    });
   }
 
   function migrateCategories() {
@@ -102,6 +130,33 @@
     var known = new Set(state.categories.flatMap(function (category) { return category.feedUrls || []; }));
     var missing = state.feeds.map(function (feed) { return feed.url; }).filter(function (url) { return !known.has(url); });
     if (missing.length) state.categories[0].feedUrls = unique((state.categories[0].feedUrls || []).concat(missing));
+  }
+
+  function seedDirectoryDemoFeeds() {
+    if (state.directorySamplesAdded) return;
+    DIRECTORY_DEMO_FEEDS.forEach(function (sample) {
+      var exists = state.feeds.some(function (feed) { return feed.url === sample.url; });
+      if (!exists) state.feeds.push({ url: sample.url, title: sample.title, status: 'pending' });
+    });
+    moveDemoFeedsToDirectoryFolder();
+    state.directorySamplesAdded = true;
+  }
+
+  function moveDemoFeedsToDirectoryFolder() {
+    var urls = DIRECTORY_DEMO_FEEDS.map(function (feed) { return feed.url; });
+    var folder = state.categories.find(function (category) {
+      return category.name.toLowerCase() === DIRECTORY_FOLDER.toLowerCase();
+    });
+    if (!folder) {
+      folder = { id: slug(DIRECTORY_FOLDER), name: DIRECTORY_FOLDER, open: true, feedUrls: [] };
+      state.categories.push(folder);
+    }
+    state.categories.forEach(function (category) {
+      category.feedUrls = (category.feedUrls || []).filter(function (url) {
+        return urls.indexOf(url) === -1;
+      });
+    });
+    folder.feedUrls = unique((folder.feedUrls || []).concat(urls));
   }
 
   function seedDefaultFolders() {
@@ -290,6 +345,9 @@
       var urls = new Set(category ? category.feedUrls || [] : []);
       return events.filter(function (event) { return urls.has(event._feedUrl); });
     }
+    if (state.activeSource.type === 'board') {
+      return boardEvents(findBoard(state.activeSource.id));
+    }
     return events;
   }
 
@@ -308,7 +366,7 @@
   function render() {
     renderControls();
     renderLibrary();
-    renderSavedFilters();
+    renderBoards();
     renderFacets();
     renderEvents();
   }
@@ -525,6 +583,7 @@
       var urls = new Set(category ? category.feedUrls || [] : []);
       return allEvents().filter(function (event) { return urls.has(event._feedUrl); }).length;
     }
+    if (source.type === 'board') return boardEvents(findBoard(source.id)).length;
     return 0;
   }
 
@@ -657,11 +716,19 @@
         { icon: '⌫', label: 'Delete', danger: true, action: function () { deleteCategoryWithConfirm(category); } }
       ];
     }
+    if (context.type === 'board') {
+      var board = findBoard(context.id);
+      return [
+        { icon: '⟷', label: 'Rename', action: function () { renameBoard(board); } },
+        { icon: '×', label: 'Vaciar colección', action: function () { clearBoard(board); } },
+        'separator',
+        { icon: '⌫', label: 'Delete', danger: true, action: function () { deleteBoard(board); } }
+      ];
+    }
     var feed = findFeed(context.id);
     return [
       { icon: '✓', label: 'Mark as Read', action: function () { markFeedRead(feed); } },
       { icon: '⟷', label: 'Rename', action: function () { openFeedOptions(feed); } },
-      { icon: '♡', label: 'Add to Favorites', action: function () { moveFeedToCategory(feed.url, 'Favorites'); persist(); render(); } },
       { icon: '⚙', label: 'Manage Feed', action: function () { openFeedOptions(feed); } },
       { icon: '↻', label: 'Refresh', action: function () { loadFeed(feed); } },
       'separator',
@@ -788,6 +855,10 @@
       var category = findCategory(state.activeSource.id);
       return category ? category.feedUrls || [] : [];
     }
+    if (state.activeSource.type === 'board') {
+      var board = findBoard(state.activeSource.id);
+      return unique((board ? board.eventRefs || [] : []).map(function (ref) { return ref.feedUrl; }));
+    }
     return unique(sourceEvents().map(function (event) { return event._feedUrl; }).filter(Boolean));
   }
 
@@ -823,41 +894,109 @@
     return state.categories.find(function (category) { return category.id === id; });
   }
 
-  function renderSavedFilters() {
-    var box = $('saved-filters');
+  function findBoard(id) {
+    return state.boards.find(function (board) { return board.id === id; });
+  }
+
+  function eventRef(event) {
+    return { feedUrl: event._feedUrl, eventId: event.id };
+  }
+
+  function sameRef(a, b) {
+    return a && b && a.feedUrl === b.feedUrl && a.eventId === b.eventId;
+  }
+
+  function boardHasEvent(board, event) {
+    var ref = eventRef(event);
+    return Boolean(board && (board.eventRefs || []).some(function (item) { return sameRef(item, ref); }));
+  }
+
+  function boardEvents(board) {
+    if (!board) return [];
+    var refs = board.eventRefs || [];
+    return allEvents().filter(function (event) {
+      var ref = eventRef(event);
+      return refs.some(function (item) { return sameRef(item, ref); });
+    });
+  }
+
+  function createBoard(name) {
+    var title = String(name || '').trim();
+    if (!title) return null;
+    var board = { id: slug(title) + '-' + Date.now().toString(36), name: title, eventRefs: [] };
+    state.boards.push(board);
+    persist();
+    renderBoards();
+    return board;
+  }
+
+  function renameBoard(board) {
+    if (!board) return;
+    var name = prompt('Nombre de la colección', board.name);
+    if (!name) return;
+    board.name = name.trim();
+    persist();
+    renderBoards();
+  }
+
+  function deleteBoard(board) {
+    if (!board || !confirm('Eliminar esta colección?')) return;
+    state.boards = state.boards.filter(function (item) { return item.id !== board.id; });
+    if (!state.boards.length) migrateBoards();
+    if (isActiveSource('board', board.id)) state.activeSource = { type: 'all', id: 'all' };
+    persist();
+    render();
+  }
+
+  function clearBoard(board) {
+    if (!board || !confirm('Vaciar esta colección?')) return;
+    board.eventRefs = [];
+    persist();
+    render();
+  }
+
+  function renderBoards() {
+    var box = $('boards');
     box.replaceChildren();
-    if (!state.savedFilters.length) {
+    if (!state.boards.length) {
       var empty = document.createElement('p');
       empty.className = 'muted-small';
-      empty.textContent = 'Sin filtros guardados.';
+      empty.textContent = 'Sin colecciones.';
       box.appendChild(empty);
       return;
     }
-    state.savedFilters.forEach(function (saved, index) {
+    state.boards.forEach(function (board) {
       var row = document.createElement('div');
-      row.className = 'saved-row';
+      row.className = 'saved-row board-row' + (isActiveSource('board', board.id) ? ' is-active' : '');
+      row.addEventListener('contextmenu', function (event) {
+        event.preventDefault();
+        openContextMenu(event, { type: 'board', id: board.id });
+      });
       var body = document.createElement('button');
       body.className = 'saved-filter';
       body.type = 'button';
-      body.textContent = saved.name;
+      body.textContent = '☆ ' + board.name;
       body.addEventListener('click', function () {
-        state.filters = Object.assign({}, saved.filters);
-        persist();
-        render();
+        setActiveSource('board', board.id);
+        closeSidebar();
       });
       var menu = document.createElement('button');
       menu.className = 'icon-button small';
       menu.type = 'button';
       menu.textContent = '...';
-      menu.setAttribute('aria-label', 'Opciones de filtro');
-      menu.addEventListener('click', function () {
-        if (confirm('Eliminar este filtro?')) {
-          state.savedFilters.splice(index, 1);
-          persist();
-          renderSavedFilters();
-        }
+      menu.setAttribute('aria-label', 'Opciones de colección');
+      menu.addEventListener('click', function (event) {
+        event.stopPropagation();
+        openContextMenu(event, { type: 'board', id: board.id });
       });
       row.append(body, menu);
+      var boardCount = boardEvents(board).length;
+      if (boardCount > 0) {
+        var count = document.createElement('span');
+        count.className = 'library-count';
+        count.textContent = String(boardCount);
+        row.appendChild(count);
+      }
       box.appendChild(row);
     });
   }
@@ -1006,19 +1145,64 @@
     var link = tpl.querySelector('.primary-link');
     link.href = event.url || event.cfp && event.cfp.url || event._feedUrl || event.id;
     var save = tpl.querySelector('.save-event');
-    var saved = state.savedEvents.indexOf(event.id) !== -1;
-    save.textContent = saved ? 'Guardado' : 'Guardar';
+    var saved = state.boards.some(function (board) { return boardHasEvent(board, event); });
+    save.textContent = saved ? 'En colección' : 'Favorito';
+    save.classList.toggle('is-active', saved);
+    save.setAttribute('aria-pressed', String(saved));
     save.addEventListener('click', function () {
-      var i = state.savedEvents.indexOf(event.id);
-      if (i === -1) state.savedEvents.push(event.id);
-      else state.savedEvents.splice(i, 1);
-      persist();
-      renderEvents();
+      openBoardPicker(event);
     });
     tpl.querySelector('.calendar-event').addEventListener('click', function () {
       downloadIcs(event);
     });
     return tpl;
+  }
+
+  function openBoardPicker(event) {
+    boardEventContext = eventRef(event);
+    renderBoardPicker();
+    openModal('board-modal');
+  }
+
+  function renderBoardPicker() {
+    var box = $('board-picker');
+    box.replaceChildren();
+    var event = currentBoardEvent();
+    if (!event) {
+      box.appendChild(messageNode('Este evento ya no está disponible en los feeds cargados.', 'warn'));
+      return;
+    }
+    state.boards.forEach(function (board) {
+      var label = document.createElement('label');
+      label.className = 'board-choice';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = board.id;
+      input.checked = boardHasEvent(board, event);
+      label.append(input, document.createTextNode(board.name));
+      box.appendChild(label);
+    });
+  }
+
+  function currentBoardEvent() {
+    if (!boardEventContext) return null;
+    return allEvents().find(function (event) { return sameRef(eventRef(event), boardEventContext); }) || null;
+  }
+
+  function saveBoardPicker() {
+    var event = currentBoardEvent();
+    if (!event) return;
+    var ref = eventRef(event);
+    var checked = Array.from(document.querySelectorAll('#board-picker input:checked')).map(function (input) { return input.value; });
+    state.boards.forEach(function (board) {
+      var has = board.eventRefs.some(function (item) { return sameRef(item, ref); });
+      var wants = checked.indexOf(board.id) !== -1;
+      if (wants && !has) board.eventRefs.push(ref);
+      if (!wants && has) board.eventRefs = board.eventRefs.filter(function (item) { return !sameRef(item, ref); });
+    });
+    persist();
+    closeModal('board-modal');
+    render();
   }
 
   function markdown(text) {
@@ -1211,6 +1395,10 @@
       var category = findCategory(state.activeSource.id);
       return category ? category.name : 'Folder';
     }
+    if (state.activeSource.type === 'board') {
+      var board = findBoard(state.activeSource.id);
+      return board ? board.name : 'Colección';
+    }
     return 'Eventos';
   }
 
@@ -1232,6 +1420,10 @@
     $('sidebar-toggle').addEventListener('click', toggleSidebar);
     $('sidebar-collapse').addEventListener('click', toggleSidebar);
     $('sidebar-restore').addEventListener('click', toggleSidebar);
+    $('board-create').addEventListener('click', function () {
+      var name = prompt('Nombre de la colección', 'Favorites');
+      if (name) createBoard(name);
+    });
     $('sidebar-scrim').addEventListener('click', closeSidebar);
     $('theme-toggle').addEventListener('click', toggleTheme);
     $('app-width').addEventListener('change', function () {
@@ -1292,12 +1484,20 @@
       persist();
       render();
     });
-    $('save-filter').addEventListener('click', function () {
-      var name = prompt('Nombre del filtro');
-      if (!name) return;
-      state.savedFilters.push({ name: name.trim(), filters: Object.assign({}, state.filters) });
-      persist();
-      renderSavedFilters();
+    $('board-add-inline').addEventListener('click', function () {
+      var board = createBoard($('new-board-name').value);
+      $('new-board-name').value = '';
+      if (board) {
+        renderBoardPicker();
+        var checkbox = Array.from(document.querySelectorAll('#board-picker input')).find(function (input) {
+          return input.value === board.id;
+        });
+        if (checkbox) checkbox.checked = true;
+      }
+    });
+    $('board-form').addEventListener('submit', function (event) {
+      event.preventDefault();
+      saveBoardPicker();
     });
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();

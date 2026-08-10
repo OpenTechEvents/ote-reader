@@ -30,7 +30,7 @@
   </a>
   <div class="header-actions">
     <button class="icon-button" type="button" id="theme-toggle" aria-label="Cambiar tema" aria-pressed="false">◐</button>
-    <button class="icon-button" type="button" id="help-open" aria-label="Ayuda">?</button>
+    <button class="icon-button" type="button" id="help-open" aria-label="Ajustes">⚙</button>
   </div>
 </header>
 
@@ -41,7 +41,6 @@
         <div class="side-head">
           <h2>Feeds</h2>
           <div class="side-tools">
-            <button class="icon-button sidebar-collapse-button" type="button" id="sidebar-collapse" aria-label="Colapsar barra lateral" aria-expanded="true">◧</button>
             <div class="add-menu-wrap">
               <button class="icon-button" type="button" id="add-menu-button" aria-label="Añadir">+</button>
               <div class="add-menu" role="menu" aria-label="Añadir feed o folder">
@@ -49,15 +48,19 @@
                 <button type="button" id="find-sources-open" role="menuitem">Discover new feeds</button>
               </div>
             </div>
+            <button class="icon-button sidebar-collapse-button" type="button" id="sidebar-collapse" aria-label="Colapsar barra lateral" aria-expanded="true">◧</button>
           </div>
         </div>
         <div class="library" id="library"></div>
       </section>
       <section class="side-block">
         <div class="side-head">
-          <h2>Filtros</h2>
+          <h2>Colecciones</h2>
+          <div class="side-tools">
+            <button class="icon-button board-create-button" type="button" id="board-create" aria-label="Crear colección">+</button>
+          </div>
         </div>
-        <div id="saved-filters"></div>
+        <div class="boards" id="boards"></div>
       </section>
     </aside>
     <button class="sidebar-restore" type="button" id="sidebar-restore" aria-label="Mostrar barra lateral">☰</button>
@@ -97,13 +100,24 @@
               </div>
               <label class="check"><input id="cfp" type="checkbox"> CFP abierto</label>
               <label class="check"><input id="future" type="checkbox" checked> Solo futuros</label>
-              <button class="ghost" type="button" id="save-filter">Guardar filtro</button>
             </div>
           </details>
-          <div class="view-switch" role="group" aria-label="Vista">
-            <button type="button" data-view="cards">Tarjetas</button>
-            <button type="button" data-view="feed">RSS</button>
-            <button type="button" data-view="calendar">Calendario</button>
+          <div class="view-control" role="group" aria-label="Vistas">
+            <span>Vistas:</span>
+            <div class="view-switch">
+              <button type="button" data-view="cards" aria-label="Vista de tarjetas" title="Tarjetas">
+                <svg class="view-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg>
+                <span>Tarjetas</span>
+              </button>
+              <button type="button" data-view="feed" aria-label="Vista de novedades" title="Novedades">
+                <svg class="view-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18h14M5 12h14M5 6h10"/><path d="M17 5l2 2 2-2"/></svg>
+                <span>Novedades</span>
+              </button>
+              <button type="button" data-view="calendar" aria-label="Vista de calendario" title="Calendario">
+                <svg class="view-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v4M17 3v4M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>
+                <span>Calendario</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -148,6 +162,23 @@
   </section>
 </dialog>
 
+<dialog class="modal" id="board-modal">
+  <form class="modal-card" id="board-form" method="dialog">
+    <div class="modal-head">
+      <h2>Guardar en colecciones</h2>
+      <button class="icon-button" type="button" data-close="board-modal" aria-label="Cerrar">×</button>
+    </div>
+    <div class="board-picker" id="board-picker"></div>
+    <div class="url-row">
+      <input id="new-board-name" type="text" placeholder="Nueva colección">
+      <button class="ghost" type="button" id="board-add-inline">Crear</button>
+    </div>
+    <div class="modal-actions">
+      <button type="submit">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog class="modal" id="options-modal">
   <form class="modal-card" id="options-form" method="dialog">
     <div class="modal-head">
@@ -170,7 +201,7 @@
 <dialog class="modal" id="help-modal">
   <section class="modal-card">
     <div class="modal-head">
-      <h2>Ayuda y ajustes</h2>
+      <h2>Ajustes</h2>
       <button class="icon-button" type="button" data-close="help-modal" aria-label="Cerrar">×</button>
     </div>
     <h3>Ajustes de lectura</h3>
@@ -188,6 +219,10 @@
     <p><strong>Tarjetas</strong> prioriza lectura visual. <strong>RSS</strong> ordena por últimos cambios. <strong>Calendario</strong> agrupa por mes.</p>
     <h3>Open source</h3>
     <p>OTE Reader es un proyecto abierto. Puedes hacer fork del repositorio para personalizar feeds iniciales, estilos o flujos para tu comunidad.</p>
+    <div class="link-actions">
+      <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader" target="_blank" rel="noopener">Ver repositorio</a>
+      <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader/issues/new" target="_blank" rel="noopener">Reportar bug o mejora</a>
+    </div>
     <div class="help-install" id="help-install" hidden>
       <h3>Instalación</h3>
       <p>OTE Reader puede instalarse como aplicación en este dispositivo.</p>
@@ -207,7 +242,7 @@
       <div class="event-tags"></div>
       <div class="event-actions">
         <a class="primary-link" target="_blank" rel="noopener">Abrir origen</a>
-        <button type="button" class="save-event">Guardar</button>
+        <button type="button" class="save-event">Favorito</button>
         <button type="button" class="calendar-event">.ics</button>
       </div>
     </div>

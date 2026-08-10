@@ -234,6 +234,14 @@ label {
   gap: 10px;
 }
 
+.view-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: .8rem;
+  font-weight: 720;
+}
 .view-switch {
   display: flex;
   border: 1px solid var(--line);
@@ -242,17 +250,31 @@ label {
   background: var(--field);
 }
 .view-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 36px;
   border: 0;
   border-radius: 0;
   background: var(--field);
   color: var(--muted);
   font-size: .84rem;
+  padding-inline: 10px;
 }
 .view-switch button + button { border-left: 1px solid var(--line); }
 .view-switch button.is-active {
-  background: var(--ink);
-  color: var(--on-ink);
+  background: var(--panel-soft);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.view-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .filters-panel {
@@ -380,6 +402,14 @@ label {
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+}
+.side-head:hover .side-tools,
+.side-head:focus-within .side-tools {
+  opacity: 1;
+  pointer-events: auto;
 }
 .side-tools .icon-button {
   border-color: transparent;
@@ -403,6 +433,12 @@ label {
   position: relative;
 }
 .add-menu-wrap > .icon-button {
+  border-color: transparent;
+  background: transparent;
+  font-size: 1.45rem;
+  font-weight: 400;
+}
+.board-create-button {
   border-color: transparent;
   background: transparent;
   font-size: 1.45rem;
@@ -595,9 +631,14 @@ label {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .saved-row {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 30px minmax(24px, auto);
   padding: 9px 0;
   border-top: 1px solid var(--line);
+}
+.saved-row.is-active {
+  background: var(--panel-soft);
+  border-radius: 7px;
+  padding-inline: 6px;
 }
 .feed-meta {
   overflow: hidden;
@@ -669,6 +710,15 @@ label {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.board-row > .icon-button {
+  opacity: 0;
+  pointer-events: none;
+}
+.board-row:hover > .icon-button,
+.board-row:focus-within > .icon-button {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .results-head, .results-actions {
@@ -826,6 +876,11 @@ label {
 .pill.warn { background: color-mix(in srgb, var(--warn) 16%, var(--panel)); color: var(--warn); }
 .event-actions { margin-top: 12px; }
 .event-actions button, .event-actions a { min-height: 34px; font-size: .84rem; }
+.save-event.is-active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
 
 .calendar-group {
   display: grid;
@@ -877,6 +932,29 @@ label {
   font-size: .92rem;
 }
 .help-install[hidden] { display: none; }
+.link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ghost-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--field);
+  color: var(--ink);
+  font-size: .86rem;
+  font-weight: 700;
+}
+.ghost-link:hover {
+  text-decoration: none;
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  color: var(--accent-strong);
+}
 .modal-card h3 {
   margin: 14px 0 4px;
   font-size: .98rem;
@@ -934,6 +1012,27 @@ label {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.board-picker {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.board-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field);
+  color: var(--ink);
+}
+.board-choice input {
+  width: 18px;
+  min-height: 18px;
+}
 
 @media (max-width: 980px) {
   .control-bar {
@@ -954,6 +1053,7 @@ label {
   }
   .view-switch button {
     flex: 1;
+    justify-content: center;
   }
   .filters-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace {
@@ -990,6 +1090,10 @@ label {
   .sidebar-collapsed .sidebar-restore {
     display: none;
   }
+  .side-tools {
+    opacity: 1;
+    pointer-events: auto;
+  }
   .hello-bar, .workspace {
     padding-inline: 12px;
   }
@@ -1017,6 +1121,11 @@ label {
   }
   .view-switch button {
     min-width: 104px;
+  }
+  .view-control {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 5px;
   }
   .sidebar {
     position: fixed;
