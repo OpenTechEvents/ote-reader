@@ -15,35 +15,33 @@
 <a class="skip" href="#events">Saltar a eventos</a>
 
 <header class="app-header">
+  <button class="icon-button menu-button" type="button" id="sidebar-toggle" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">☰</button>
   <a class="brand" href="./" aria-label="OTE Reader">
     <span class="brand-mark">OTE</span>
     <span>Reader</span>
   </a>
   <div class="header-actions">
     <button class="icon-button" type="button" id="help-open" aria-label="Ayuda">?</button>
-    <button class="install-button" type="button" id="install-button" hidden>Instalar</button>
-    <button class="primary-action" type="button" id="subscribe-open">+ Nueva suscripción</button>
   </div>
 </header>
 
-<main>
-  <section class="hero">
-    <p class="eyebrow">Feeds OpenTechEvents</p>
-    <h1>OTE Reader</h1>
-    <p class="lead">Sigue comunidades, filtra eventos y abre cada fuente original desde una app instalable.</p>
-  </section>
+<section class="hello-bar" id="install-bar" hidden>
+  <p>Instala OTE Reader para tener tus eventos siempre a mano.</p>
+  <div>
+    <button type="button" id="install-bar-button">Instalar</button>
+    <button class="icon-button" type="button" id="install-dismiss" aria-label="Cerrar">×</button>
+  </div>
+</section>
 
+<main>
   <section class="control-bar" aria-label="Controles de eventos">
     <div class="search-field">
       <label for="q">Buscar</label>
       <input id="q" type="search" placeholder="python, málaga, kubernetes...">
+      <div class="chips" id="tag-cloud"></div>
+      <p class="hint-line" id="chip-hint" hidden>Los temas se ajustan a los eventos que quedan con tus filtros.</p>
     </div>
-    <div class="view-switch" role="group" aria-label="Vista">
-      <button type="button" data-view="cards">Tarjetas</button>
-      <button type="button" data-view="feed">RSS</button>
-      <button type="button" data-view="calendar">Calendario</button>
-    </div>
-    <details class="filters-panel" id="filters-panel">
+    <details class="filters-panel" id="filters-panel" open>
       <summary>Filtros</summary>
       <div class="filters-grid">
         <div class="field">
@@ -72,10 +70,15 @@
         <button class="ghost" type="button" id="save-filter">Guardar filtro</button>
       </div>
     </details>
+    <div class="view-switch" role="group" aria-label="Vista">
+      <button type="button" data-view="cards">Tarjetas</button>
+      <button type="button" data-view="feed">RSS</button>
+      <button type="button" data-view="calendar">Calendario</button>
+    </div>
   </section>
 
   <section class="workspace">
-    <aside class="sidebar" aria-label="Suscripciones">
+    <aside class="sidebar" id="sidebar" aria-label="Suscripciones">
       <section class="side-block">
         <div class="side-head">
           <h2>Suscripciones</h2>
@@ -97,10 +100,10 @@
         <button class="ghost" type="button" id="refresh">Actualizar</button>
       </div>
       <div id="messages"></div>
-      <div class="chips" id="tag-cloud"></div>
       <div class="events" id="event-list"></div>
     </section>
   </section>
+  <div class="scrim" id="sidebar-scrim" hidden></div>
 </main>
 
 <dialog class="modal" id="subscribe-modal">
@@ -131,6 +134,11 @@
   href="/events.json"&gt;</code></pre>
     <h3>Vistas</h3>
     <p><strong>Tarjetas</strong> prioriza lectura visual. <strong>RSS</strong> ordena por últimos cambios. <strong>Calendario</strong> agrupa por mes.</p>
+    <div class="help-install" id="help-install" hidden>
+      <h3>Instalación</h3>
+      <p>OTE Reader puede instalarse como aplicación en este dispositivo.</p>
+      <button type="button" id="install-help-button">Instalar</button>
+    </div>
   </section>
 </dialog>
 

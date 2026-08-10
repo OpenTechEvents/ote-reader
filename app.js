@@ -2,6 +2,7 @@
   'use strict';
 
   var STORAGE = 'ote-reader-state-v1';
+  var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
   var DEFAULT_FEED = new URL('demo-feed.json', location.href).href;
   var state = {
     feeds: [],
@@ -24,6 +25,7 @@
         state.savedFilters = state.savedFilters || [];
         state.savedEvents = state.savedEvents || [];
         state.view = state.view || 'cards';
+        state.filters.q = normaliseQuery(state.filters.q || '');
       }
     } catch (e) {
       showMessage('No se pudo leer el estado guardado. Se usará una sesión limpia.', 'warn');
@@ -103,7 +105,10 @@
   }
 
   function matches(event) {
-    var filters = state.filters;
+    return matchesWithFilters(event, state.filters);
+  }
+
+  function matchesWithFilters(event, filters) {
     var date = startAsDate(event);
     if (filters.future && date && date < startOfToday()) return false;
     if (filters.mode && event.attendanceMode !== filters.mode) return false;
@@ -111,7 +116,7 @@
     if (filters.country && countryOf(event) !== filters.country) return false;
     if (filters.cfp && !cfpIsOpen(event)) return false;
     if (filters.q) {
-      var parts = filters.q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+      var parts = queryTerms(filters.q);
       var haystack = eventHaystack(event);
       if (!parts.every(function (part) { return haystack.indexOf(part) !== -1; })) return false;
     }
@@ -314,22 +319,62 @@
     var events = allEvents();
     fillSelect('language', unique(events.flatMap(function (e) { return e.languages || []; })), 'Cualquiera');
     fillSelect('country', unique(events.map(countryOf).filter(Boolean)), 'Cualquiera');
-    var tags = unique(events.flatMap(function (e) { return e.tags || []; })).slice(0, 14);
+    var selected = queryTerms(state.filters.q);
+    var possibleEvents = allEvents().filter(function (event) { return matchesWithoutQuery(event); });
+    var tags = unique(possibleEvents.flatMap(function (e) { return e.tags || []; }))
+      .filter(function (tag) {
+        return selected.indexOf(tag.toLowerCase()) !== -1 || wouldReturnResults(tag);
+      })
+      .slice(0, 14);
     var cloud = $('tag-cloud');
     cloud.replaceChildren();
+    $('chip-hint').hidden = tags.length === 0;
     tags.forEach(function (tag) {
+      var key = tag.toLowerCase();
+      var active = selected.indexOf(key) !== -1;
       var button = document.createElement('button');
-      button.className = 'chip' + (state.filters.q.toLowerCase().split(/\s+/).indexOf(tag.toLowerCase()) !== -1 ? ' is-active' : '');
+      button.className = 'chip' + (active ? ' is-active' : '');
       button.type = 'button';
       button.textContent = '#' + tag;
+      button.setAttribute('aria-pressed', String(active));
       button.addEventListener('click', function () {
-        var q = state.filters.q.trim();
-        state.filters.q = q ? q + ' ' + tag : tag;
+        toggleQueryTerm(tag);
         persist();
         render();
       });
       cloud.appendChild(button);
     });
+  }
+
+  function matchesWithoutQuery(event) {
+    return matchesWithFilters(event, Object.assign({}, state.filters, { q: '' }));
+  }
+
+  function wouldReturnResults(tag) {
+    var current = queryTerms(state.filters.q);
+    if (current.indexOf(tag.toLowerCase()) !== -1) return true;
+    var next = current.concat([tag.toLowerCase()]).join(' ');
+    var filters = Object.assign({}, state.filters, { q: next });
+    return allEvents().some(function (event) {
+      return matchesWithFilters(event, filters);
+    });
+  }
+
+  function toggleQueryTerm(term) {
+    var key = term.toLowerCase();
+    var terms = queryTerms(state.filters.q);
+    var index = terms.indexOf(key);
+    if (index === -1) terms.push(key);
+    else terms.splice(index, 1);
+    state.filters.q = terms.join(' ');
+  }
+
+  function queryTerms(value) {
+    return unique(String(value || '').toLowerCase().split(/[\s,]+/).filter(Boolean));
+  }
+
+  function normaliseQuery(value) {
+    return queryTerms(value).join(' ');
   }
 
   function fillSelect(id, values, firstLabel) {
@@ -603,8 +648,9 @@
   }
 
   function bind() {
-    $('subscribe-open').addEventListener('click', function () { openModal('subscribe-modal'); });
     $('subscribe-open-side').addEventListener('click', function () { openModal('subscribe-modal'); });
+    $('sidebar-toggle').addEventListener('click', openSidebar);
+    $('sidebar-scrim').addEventListener('click', closeSidebar);
     $('help-open').addEventListener('click', function () { openModal('help-modal'); });
     document.querySelectorAll('[data-close]').forEach(function (button) {
       button.addEventListener('click', function () { closeModal(button.dataset.close); });
@@ -622,7 +668,7 @@
     });
     ['q', 'mode', 'language', 'country', 'cfp', 'future'].forEach(function (id) {
       $(id).addEventListener('input', function () {
-        state.filters[id] = this.type === 'checkbox' ? this.checked : this.value;
+        state.filters[id] = this.type === 'checkbox' ? this.checked : (id === 'q' ? normaliseQuery(this.value) : this.value);
         persist();
         render();
       });
@@ -647,15 +693,44 @@
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
       deferredInstall = event;
-      $('install-button').hidden = false;
+      updateInstallUi();
     });
-    $('install-button').addEventListener('click', async function () {
-      if (!deferredInstall) return;
-      deferredInstall.prompt();
-      await deferredInstall.userChoice;
-      deferredInstall = null;
-      $('install-button').hidden = true;
+    $('install-bar-button').addEventListener('click', promptInstall);
+    $('install-help-button').addEventListener('click', promptInstall);
+    $('install-dismiss').addEventListener('click', function () {
+      try { localStorage.setItem(INSTALL_DISMISSED, '1'); } catch (e) { /* storage unavailable */ }
+      updateInstallUi();
     });
+  }
+
+  function installDismissed() {
+    try { return localStorage.getItem(INSTALL_DISMISSED) === '1'; } catch (e) { return false; }
+  }
+
+  function updateInstallUi() {
+    var canInstall = Boolean(deferredInstall);
+    $('install-bar').hidden = !canInstall || installDismissed();
+    $('help-install').hidden = !canInstall;
+  }
+
+  async function promptInstall() {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    await deferredInstall.userChoice;
+    deferredInstall = null;
+    updateInstallUi();
+  }
+
+  function openSidebar() {
+    $('sidebar').classList.add('is-open');
+    $('sidebar-scrim').hidden = false;
+    $('sidebar-toggle').setAttribute('aria-expanded', 'true');
+  }
+
+  function closeSidebar() {
+    $('sidebar').classList.remove('is-open');
+    $('sidebar-scrim').hidden = true;
+    $('sidebar-toggle').setAttribute('aria-expanded', 'false');
   }
 
   function applySubscribeParam() {
@@ -667,6 +742,7 @@
   async function boot() {
     loadState();
     bind();
+    updateInstallUi();
     render();
     applySubscribeParam();
     await Promise.all(state.feeds.map(loadFeed));
