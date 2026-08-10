@@ -20,6 +20,7 @@
   var feedCache = new Map();
   var adopterCache = null;
   var deferredInstall = null;
+  var optionsContext = null;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -304,7 +305,8 @@
         active: isActiveSource('category', category.id),
         onClick: function () { setActiveSource('category', category.id); closeSidebar(); },
         className: 'category-row',
-        menu: function () { categoryMenu(category); }
+        menu: function () { openCategoryOptions(category); },
+        dropCategoryId: category.id
       }));
 
       if (category.open !== false) {
@@ -313,12 +315,14 @@
           if (!feed) return;
           box.appendChild(libraryRow({
             title: feed.title || 'Feed OTE',
-            meta: feed.status === 'error' ? feed.error : compactUrl(feed.url),
+            meta: feed.status === 'error' ? feed.error : '',
             count: sourceCount({ type: 'feed', id: feed.url }),
             active: isActiveSource('feed', feed.url),
+            unread: feedHasUnread(feed),
             onClick: function () { setActiveSource('feed', feed.url); closeSidebar(); },
             className: 'feed-row nested',
-            menu: function () { feedMenu(feed); }
+            menu: function () { openFeedOptions(feed); },
+            dragUrl: feed.url
           }));
         });
       }
@@ -328,6 +332,30 @@
   function libraryRow(options) {
     var row = document.createElement('div');
     row.className = 'library-row ' + (options.className || '') + (options.active ? ' is-active' : '');
+    if (options.unread) row.classList.add('has-unread');
+    if (options.dragUrl) {
+      row.draggable = true;
+      row.dataset.feedUrl = options.dragUrl;
+      row.addEventListener('dragstart', function (event) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', options.dragUrl);
+      });
+    }
+    if (options.dropCategoryId) {
+      row.dataset.categoryId = options.dropCategoryId;
+      row.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        row.classList.add('is-drop-target');
+      });
+      row.addEventListener('dragleave', function () {
+        row.classList.remove('is-drop-target');
+      });
+      row.addEventListener('drop', function (event) {
+        event.preventDefault();
+        row.classList.remove('is-drop-target');
+        moveFeedToCategoryId(event.dataTransfer.getData('text/plain'), options.dropCategoryId);
+      });
+    }
     var main = document.createElement('button');
     main.type = 'button';
     main.className = 'library-main';
@@ -364,6 +392,26 @@
     return row;
   }
 
+  function feedHasUnread(feed) {
+    var latest = latestFeedActivity(feed);
+    if (!latest) return !feed.lastSeenAt && feed.status === 'ok';
+    if (!feed.lastSeenAt) return feed.status === 'ok';
+    return latest > new Date(feed.lastSeenAt);
+  }
+
+  function latestFeedActivity(feed) {
+    var cached = feedCache.get(feed.url);
+    var dates = [feed.updatedAt];
+    if (cached) {
+      dates = dates.concat((cached.events || []).map(function (event) {
+        return event.updatedAt;
+      }));
+    }
+    return dates.map(function (value) { return value ? new Date(value) : null; })
+      .filter(function (date) { return date && !Number.isNaN(date.getTime()); })
+      .sort(function (a, b) { return b - a; })[0] || null;
+  }
+
   function setActiveSource(type, id) {
     state.activeSource = { type: type, id: id };
     persist();
@@ -385,50 +433,53 @@
     return 0;
   }
 
-  function categoryMenu(category) {
-    var choice = prompt('Opciones: escribe "renombrar", "plegar" o "eliminar".', 'renombrar');
-    if (!choice) return;
-    choice = choice.trim().toLowerCase();
-    if (choice === 'renombrar') {
-      var name = prompt('Nombre del folder', category.name);
-      if (!name) return;
-      category.name = name.trim();
-    } else if (choice === 'plegar') {
-      category.open = category.open === false;
-    } else if (choice === 'eliminar') {
-      if (!confirm('Eliminar este folder? Los feeds se moverán al primer folder.')) return;
-      removeCategory(category.id);
-    }
-    persist();
-    render();
+  function openFeedOptions(feed) {
+    optionsContext = { type: 'feed', id: feed.url };
+    $('options-title').textContent = feed.title || 'Feed OTE';
+    $('options-name').value = feed.title || '';
+    fillFolderOptions(feed.url);
+    document.querySelectorAll('.feed-only').forEach(function (node) { node.hidden = false; });
+    document.querySelectorAll('.folder-only').forEach(function (node) { node.hidden = true; });
+    openModal('options-modal');
   }
 
-  function feedMenu(feed) {
-    var choice = prompt('Opciones: escribe "renombrar", "mover", "actualizar" o "eliminar".', 'renombrar');
-    if (!choice) return;
-    choice = choice.trim().toLowerCase();
-    if (choice === 'renombrar') {
-      var name = prompt('Nombre de la suscripción', feed.title || '');
-      if (!name) return;
-      feed.customTitle = name.trim();
-      feed.title = feed.customTitle;
-    } else if (choice === 'mover') {
-      var names = state.categories.map(function (category) { return category.name; }).join(', ');
-      var target = prompt('Mover a folder:', names);
-      if (!target) return;
-      moveFeedToCategory(feed.url, target.trim());
-    } else if (choice === 'actualizar') {
-      loadFeed(feed);
-      return;
-    } else if (choice === 'eliminar') {
-      if (!confirm('Eliminar esta suscripción?')) return;
-      feedCache.delete(feed.url);
-      state.feeds = state.feeds.filter(function (item) { return item.url !== feed.url; });
-      state.categories.forEach(function (category) {
-        category.feedUrls = (category.feedUrls || []).filter(function (url) { return url !== feed.url; });
-      });
-      if (isActiveSource('feed', feed.url)) state.activeSource = { type: 'all', id: 'all' };
+  function openCategoryOptions(category) {
+    optionsContext = { type: 'category', id: category.id };
+    $('options-title').textContent = category.name;
+    $('options-name').value = category.name;
+    document.querySelectorAll('.feed-only').forEach(function (node) { node.hidden = true; });
+    document.querySelectorAll('.folder-only').forEach(function (node) { node.hidden = false; });
+    openModal('options-modal');
+  }
+
+  function fillFolderOptions(feedUrl) {
+    var select = $('options-folder');
+    select.replaceChildren();
+    state.categories.forEach(function (category) {
+      var option = document.createElement('option');
+      option.value = category.id;
+      option.textContent = category.name;
+      option.selected = (category.feedUrls || []).indexOf(feedUrl) !== -1;
+      select.appendChild(option);
+    });
+  }
+
+  function saveOptions() {
+    if (!optionsContext) return;
+    var name = $('options-name').value.trim();
+    if (optionsContext.type === 'feed') {
+      var feed = findFeed(optionsContext.id);
+      if (!feed) return;
+      if (name) {
+        feed.customTitle = name;
+        feed.title = name;
+      }
+      moveFeedToCategoryId(feed.url, $('options-folder').value);
+    } else {
+      var category = findCategory(optionsContext.id);
+      if (category && name) category.name = name;
     }
+    closeModal('options-modal');
     persist();
     render();
   }
@@ -462,6 +513,60 @@
       item.feedUrls = (item.feedUrls || []).filter(function (url) { return url !== feedUrl; });
     });
     category.feedUrls = unique((category.feedUrls || []).concat([feedUrl]));
+  }
+
+  function moveFeedToCategoryId(feedUrl, categoryId) {
+    var feed = findFeed(feedUrl);
+    var category = findCategory(categoryId);
+    if (!feed || !category) return;
+    state.categories.forEach(function (item) {
+      item.feedUrls = (item.feedUrls || []).filter(function (url) { return url !== feedUrl; });
+    });
+    category.feedUrls = unique((category.feedUrls || []).concat([feedUrl]));
+    category.open = true;
+    persist();
+    render();
+  }
+
+  function markFeedRead(feed) {
+    if (!feed) return;
+    feed.lastSeenAt = new Date().toISOString();
+    persist();
+    renderLibrary();
+  }
+
+  function markVisibleFeedsRead() {
+    var urls = activeFeedUrls();
+    urls.forEach(function (url) {
+      var feed = findFeed(url);
+      if (feed) feed.lastSeenAt = new Date().toISOString();
+    });
+    persist();
+    render();
+  }
+
+  function activeFeedUrls() {
+    if (!state.activeSource || state.activeSource.type === 'all') {
+      return state.feeds.map(function (feed) { return feed.url; });
+    }
+    if (state.activeSource.type === 'feed') return [state.activeSource.id];
+    if (state.activeSource.type === 'category') {
+      var category = findCategory(state.activeSource.id);
+      return category ? category.feedUrls || [] : [];
+    }
+    return unique(sourceEvents().map(function (event) { return event._feedUrl; }).filter(Boolean));
+  }
+
+  function deleteFeed(feed) {
+    if (!feed) return;
+    feedCache.delete(feed.url);
+    state.feeds = state.feeds.filter(function (item) { return item.url !== feed.url; });
+    state.categories.forEach(function (category) {
+      category.feedUrls = (category.feedUrls || []).filter(function (url) { return url !== feed.url; });
+    });
+    if (isActiveSource('feed', feed.url)) state.activeSource = { type: 'all', id: 'all' };
+    persist();
+    render();
   }
 
   function findFeed(url) {
@@ -879,8 +984,7 @@
     $('subscribe-open-side').addEventListener('click', function () { openModal('subscribe-modal'); });
     $('find-sources-open').addEventListener('click', openSources);
     $('folder-create').addEventListener('click', createFolder);
-    $('sidebar-collapse').addEventListener('click', toggleDesktopSidebar);
-    $('sidebar-toggle').addEventListener('click', openSidebar);
+    $('sidebar-toggle').addEventListener('click', toggleSidebar);
     $('sidebar-scrim').addEventListener('click', closeSidebar);
     $('help-open').addEventListener('click', function () { openModal('help-modal'); });
     document.querySelectorAll('[data-close]').forEach(function (button) {
@@ -913,6 +1017,36 @@
     });
     $('refresh').addEventListener('click', function () {
       state.feeds.forEach(loadFeed);
+    });
+    $('mark-all-read').addEventListener('click', markVisibleFeedsRead);
+    $('options-form').addEventListener('submit', function (event) {
+      event.preventDefault();
+      saveOptions();
+    });
+    $('options-refresh').addEventListener('click', function () {
+      var feed = optionsContext && findFeed(optionsContext.id);
+      closeModal('options-modal');
+      if (feed) loadFeed(feed);
+    });
+    $('options-mark-read').addEventListener('click', function () {
+      markFeedRead(optionsContext && findFeed(optionsContext.id));
+      closeModal('options-modal');
+    });
+    $('options-toggle-folder').addEventListener('click', function () {
+      var category = optionsContext && findCategory(optionsContext.id);
+      if (!category) return;
+      category.open = category.open === false;
+      closeModal('options-modal');
+      persist();
+      render();
+    });
+    $('options-delete').addEventListener('click', function () {
+      if (!optionsContext || !confirm('Eliminar?')) return;
+      if (optionsContext.type === 'feed') deleteFeed(findFeed(optionsContext.id));
+      if (optionsContext.type === 'category') removeCategory(optionsContext.id);
+      closeModal('options-modal');
+      persist();
+      render();
     });
     $('save-filter').addEventListener('click', function () {
       var name = prompt('Nombre del filtro');
@@ -1012,6 +1146,21 @@
     updateInstallUi();
   }
 
+  function isMobileSidebar() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function toggleSidebar() {
+    if (isMobileSidebar()) {
+      if ($('sidebar').classList.contains('is-open')) closeSidebar();
+      else openSidebar();
+      return;
+    }
+    document.body.classList.toggle('sidebar-collapsed');
+    var collapsed = document.body.classList.contains('sidebar-collapsed');
+    $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
+  }
+
   function openSidebar() {
     $('sidebar').classList.add('is-open');
     $('sidebar-scrim').hidden = false;
@@ -1022,12 +1171,6 @@
     $('sidebar').classList.remove('is-open');
     $('sidebar-scrim').hidden = true;
     $('sidebar-toggle').setAttribute('aria-expanded', 'false');
-  }
-
-  function toggleDesktopSidebar() {
-    document.body.classList.toggle('sidebar-collapsed');
-    var collapsed = document.body.classList.contains('sidebar-collapsed');
-    $('sidebar-collapse').setAttribute('aria-expanded', String(!collapsed));
   }
 
   function applySubscribeParam() {

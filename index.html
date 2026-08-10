@@ -24,7 +24,6 @@
 
 <header class="app-header">
   <button class="icon-button menu-button" type="button" id="sidebar-toggle" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">☰</button>
-  <button class="icon-button desktop-sidebar-button" type="button" id="sidebar-collapse" aria-label="Colapsar barra lateral" aria-expanded="true">◧</button>
   <a class="brand" href="./" aria-label="OTE Reader">
     <span class="brand-mark">OTE</span>
     <span>Reader</span>
@@ -42,7 +41,7 @@
       <div class="chips" id="tag-cloud"></div>
       <p class="hint-line" id="chip-hint" hidden>Los temas se ajustan a los eventos que quedan con tus filtros.</p>
     </div>
-    <details class="filters-panel" id="filters-panel" open>
+    <details class="filters-panel" id="filters-panel">
       <summary>Filtros</summary>
       <div class="filters-grid">
         <div class="field">
@@ -87,8 +86,8 @@
             <button class="icon-button" type="button" id="add-menu-button" aria-label="Añadir">+</button>
             <div class="add-menu" role="menu" aria-label="Añadir feed o folder">
               <button type="button" id="folder-create" role="menuitem">Create New Folder</button>
-              <button type="button" id="subscribe-open-side" role="menuitem">Follow Source</button>
-              <button type="button" id="find-sources-open" role="menuitem">Find Sources</button>
+              <button type="button" id="subscribe-open-side" role="menuitem">Manual subscription</button>
+              <button type="button" id="find-sources-open" role="menuitem">Discover new feeds</button>
             </div>
           </div>
         </div>
@@ -105,7 +104,10 @@
     <section class="events-column" id="events" aria-live="polite">
       <div class="results-head">
         <h2 id="result-count">Eventos</h2>
-        <button class="ghost" type="button" id="refresh">Actualizar</button>
+        <div class="results-actions">
+          <button class="ghost" type="button" id="mark-all-read">Todos vistos</button>
+          <button class="ghost" type="button" id="refresh">Actualizar</button>
+        </div>
       </div>
       <div id="messages"></div>
       <div class="events" id="event-list"></div>
@@ -132,12 +134,32 @@
 <dialog class="modal modal-wide" id="sources-modal">
   <section class="modal-card">
     <div class="modal-head">
-      <h2>Find sources</h2>
+      <h2>Discover new feeds</h2>
       <button class="icon-button" type="button" data-close="sources-modal" aria-label="Cerrar">×</button>
     </div>
     <p>Fuentes publicadas en el catálogo de adopters de OpenTechEvents.</p>
     <div class="source-list" id="source-list"></div>
   </section>
+</dialog>
+
+<dialog class="modal" id="options-modal">
+  <form class="modal-card" id="options-form" method="dialog">
+    <div class="modal-head">
+      <h2 id="options-title">Opciones</h2>
+      <button class="icon-button" type="button" data-close="options-modal" aria-label="Cerrar">×</button>
+    </div>
+    <label for="options-name">Nombre</label>
+    <input id="options-name" name="name" autocomplete="off">
+    <label class="feed-only" for="options-folder">Folder</label>
+    <select class="feed-only" id="options-folder" name="folder"></select>
+    <div class="modal-actions">
+      <button type="submit">Guardar</button>
+      <button class="ghost feed-only" type="button" id="options-refresh">Actualizar</button>
+      <button class="ghost feed-only" type="button" id="options-mark-read">Marcar visto</button>
+      <button class="ghost folder-only" type="button" id="options-toggle-folder">Plegar/expandir</button>
+      <button class="danger" type="button" id="options-delete">Eliminar</button>
+    </div>
+  </form>
 </dialog>
 
 <dialog class="modal" id="help-modal">
