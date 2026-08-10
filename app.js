@@ -3,6 +3,8 @@
 
   var STORAGE = 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
+  var THEME_STORAGE = 'ote-reader-theme-v1';
+  var WIDTH_STORAGE = 'ote-reader-width-v1';
   var ADOPTERS_URL = 'https://opentechevents.org/data/adopters.json';
   var DEFAULT_FEED = new URL('demo-feed.json', location.href).href;
   var DEFAULT_FOLDERS = ['Conferencias', 'Eventos Almería', 'CFP para charlas'];
@@ -21,8 +23,47 @@
   var adopterCache = null;
   var deferredInstall = null;
   var optionsContext = null;
+  var editingCategoryId = null;
 
   var $ = function (id) { return document.getElementById(id); };
+
+  function initTheme() {
+    var saved = '';
+    try { saved = localStorage.getItem(THEME_STORAGE) || ''; } catch (e) { /* storage unavailable */ }
+    var dark = saved ? saved === 'dark' : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(dark ? 'dark' : 'light');
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    var dark = theme === 'dark';
+    var toggle = $('theme-toggle');
+    if (toggle) {
+      toggle.textContent = dark ? '☀' : '◐';
+      toggle.setAttribute('aria-pressed', String(dark));
+      toggle.setAttribute('aria-label', dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro');
+    }
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#0d1118' : '#10131a');
+  }
+
+  function toggleTheme() {
+    var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_STORAGE, next); } catch (e) { /* storage unavailable */ }
+  }
+
+  function initWidthPreference() {
+    var saved = 'comfortable';
+    try { saved = localStorage.getItem(WIDTH_STORAGE) || saved; } catch (e) { /* storage unavailable */ }
+    applyWidthPreference(saved === 'full' ? 'full' : 'comfortable');
+  }
+
+  function applyWidthPreference(value) {
+    var next = value === 'full' ? 'full' : 'comfortable';
+    document.documentElement.dataset.width = next;
+    if ($('app-width')) $('app-width').value = next;
+  }
 
   function loadState() {
     try {
@@ -304,11 +345,15 @@
         meta: '',
         count: sourceCount({ type: 'category', id: category.id }),
         active: isActiveSource('category', category.id),
+        unread: categoryHasUnread(category),
         onClick: function () { setActiveSource('category', category.id); closeSidebar(); },
         className: 'category-row',
         menu: function (event) { openContextMenu(event, { type: 'category', id: category.id }); },
         chevron: category.open !== false ? '⌄' : '›',
         onChevron: function () { toggleCategory(category); },
+        editing: editingCategoryId === category.id,
+        onRename: function (name) { finishCategoryRename(category, name); },
+        onCancelRename: function () { cancelCategoryRename(); },
         context: { type: 'category', id: category.id },
         dropCategoryId: category.id
       }));
@@ -367,10 +412,10 @@
         moveFeedToCategoryId(event.dataTransfer.getData('text/plain'), options.dropCategoryId);
       });
     }
-    var main = document.createElement('button');
-    main.type = 'button';
+    var main = document.createElement(options.editing ? 'div' : 'button');
+    if (!options.editing) main.type = 'button';
     main.className = 'library-main';
-    main.addEventListener('click', options.onClick);
+    if (!options.editing) main.addEventListener('click', options.onClick);
     if (options.chevron) {
       var chevron = document.createElement('button');
       chevron.className = 'chevron-button';
@@ -385,9 +430,28 @@
     }
     var body = document.createElement('span');
     body.className = 'library-body';
-    var title = document.createElement('span');
-    title.className = 'feed-title';
-    title.textContent = options.title;
+    var title = options.editing ? document.createElement('input') : document.createElement('span');
+    title.className = options.editing ? 'inline-name-input' : 'feed-title';
+    if (options.editing) {
+      title.value = options.title;
+      title.addEventListener('click', function (event) { event.stopPropagation(); });
+      title.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') title.blur();
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          options.onCancelRename();
+        }
+      });
+      title.addEventListener('blur', function () {
+        options.onRename(title.value);
+      });
+      setTimeout(function () {
+        title.focus();
+        title.select();
+      }, 0);
+    } else {
+      title.textContent = options.title;
+    }
     var meta = document.createElement('span');
     meta.className = 'feed-meta';
     meta.textContent = options.meta || '';
@@ -420,6 +484,12 @@
     if (!latest) return !feed.lastSeenAt && feed.status === 'ok';
     if (!feed.lastSeenAt) return feed.status === 'ok';
     return latest > new Date(feed.lastSeenAt);
+  }
+
+  function categoryHasUnread(category) {
+    return Boolean(category && (category.feedUrls || []).some(function (url) {
+      return feedHasUnread(findFeed(url));
+    }));
   }
 
   function latestFeedActivity(feed) {
@@ -545,7 +615,7 @@
       var category = findCategory(context.id);
       return [
         { icon: '✓', label: 'Mark as Read', action: function () { markCategoryRead(category); } },
-        { icon: '⟷', label: 'Rename', action: function () { openCategoryOptions(category); } },
+        { icon: '⟷', label: 'Rename', action: function () { startCategoryRename(category); } },
         { icon: '☊', label: 'Manage Feeds', action: openSources },
         { icon: '⚙', label: 'Folder settings', action: function () { openCategoryOptions(category); } },
         'separator',
@@ -581,6 +651,25 @@
     if (!category) return;
     category.open = category.open === false;
     persist();
+    renderLibrary();
+  }
+
+  function startCategoryRename(category) {
+    if (!category) return;
+    editingCategoryId = category.id;
+    renderLibrary();
+  }
+
+  function finishCategoryRename(category, name) {
+    editingCategoryId = null;
+    var next = String(name || '').trim();
+    if (category && next) category.name = next;
+    persist();
+    render();
+  }
+
+  function cancelCategoryRename() {
+    editingCategoryId = null;
     renderLibrary();
   }
 
@@ -1113,6 +1202,11 @@
       openContextMenu(event, { type: 'all', id: 'all' });
     });
     $('sidebar-scrim').addEventListener('click', closeSidebar);
+    $('theme-toggle').addEventListener('click', toggleTheme);
+    $('app-width').addEventListener('change', function () {
+      applyWidthPreference(this.value);
+      try { localStorage.setItem(WIDTH_STORAGE, this.value); } catch (e) { /* storage unavailable */ }
+    });
     $('help-open').addEventListener('click', function () { openModal('help-modal'); });
     document.querySelectorAll('[data-close]').forEach(function (button) {
       button.addEventListener('click', function () { closeModal(button.dataset.close); });
@@ -1308,6 +1402,8 @@
   }
 
   async function boot() {
+    initTheme();
+    initWidthPreference();
     loadState();
     bind();
     updateInstallUi();

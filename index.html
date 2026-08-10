@@ -29,54 +29,12 @@
     <span>Reader</span>
   </a>
   <div class="header-actions">
+    <button class="icon-button" type="button" id="theme-toggle" aria-label="Cambiar tema" aria-pressed="false">◐</button>
     <button class="icon-button" type="button" id="help-open" aria-label="Ayuda">?</button>
   </div>
 </header>
 
 <main>
-  <section class="control-bar" aria-label="Controles de eventos">
-    <div class="search-field">
-      <label for="q">Buscar</label>
-      <input id="q" type="search" placeholder="python, málaga, kubernetes...">
-      <div class="chips" id="tag-cloud"></div>
-      <p class="hint-line" id="chip-hint" hidden>Los temas se ajustan a los eventos que quedan con tus filtros.</p>
-    </div>
-    <details class="filters-panel" id="filters-panel">
-      <summary>Filtros</summary>
-      <div class="filters-grid">
-        <div class="field">
-          <label for="mode">Formato</label>
-          <select id="mode">
-            <option value="">Cualquiera</option>
-            <option value="online">Online</option>
-            <option value="in-person">Presencial</option>
-            <option value="hybrid">Híbrido</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="language">Idioma</label>
-          <select id="language">
-            <option value="">Cualquiera</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="country">País</label>
-          <select id="country">
-            <option value="">Cualquiera</option>
-          </select>
-        </div>
-        <label class="check"><input id="cfp" type="checkbox"> CFP abierto</label>
-        <label class="check"><input id="future" type="checkbox" checked> Solo futuros</label>
-        <button class="ghost" type="button" id="save-filter">Guardar filtro</button>
-      </div>
-    </details>
-    <div class="view-switch" role="group" aria-label="Vista">
-      <button type="button" data-view="cards">Tarjetas</button>
-      <button type="button" data-view="feed">RSS</button>
-      <button type="button" data-view="calendar">Calendario</button>
-    </div>
-  </section>
-
   <section class="workspace">
     <aside class="sidebar" id="sidebar" aria-label="Suscripciones">
       <section class="side-block">
@@ -86,12 +44,12 @@
             <button class="icon-button sidebar-collapse-button" type="button" id="sidebar-collapse" aria-label="Colapsar barra lateral" aria-expanded="true">◧</button>
             <button class="icon-button subtle-menu" type="button" id="sidebar-more" aria-label="Opciones de feeds">...</button>
             <div class="add-menu-wrap">
-            <button class="icon-button" type="button" id="add-menu-button" aria-label="Añadir">+</button>
-            <div class="add-menu" role="menu" aria-label="Añadir feed o folder">
-              <button type="button" id="folder-create" role="menuitem">Create New Folder</button>
-              <button type="button" id="subscribe-open-side" role="menuitem">Manual subscription</button>
-              <button type="button" id="find-sources-open" role="menuitem">Discover new feeds</button>
-            </div>
+              <button class="icon-button" type="button" id="add-menu-button" aria-label="Añadir">+</button>
+              <div class="add-menu" role="menu" aria-label="Añadir feed o folder">
+                <button type="button" id="folder-create" role="menuitem">Create New Folder</button>
+                <button type="button" id="subscribe-open-side" role="menuitem">Manual subscription</button>
+                <button type="button" id="find-sources-open" role="menuitem">Discover new feeds</button>
+              </div>
             </div>
           </div>
         </div>
@@ -106,6 +64,50 @@
     </aside>
 
     <section class="events-column" id="events" aria-live="polite">
+      <section class="control-bar" aria-label="Controles de eventos">
+        <div class="search-field">
+          <label for="q">Buscar</label>
+          <input id="q" type="search" placeholder="python, málaga, kubernetes...">
+          <div class="chips" id="tag-cloud"></div>
+          <p class="hint-line" id="chip-hint" hidden>Los temas se ajustan a los eventos que quedan con tus filtros.</p>
+        </div>
+        <div class="toolbar-actions">
+          <details class="filters-panel" id="filters-panel">
+            <summary>Filtros</summary>
+            <div class="filters-grid">
+              <div class="field">
+                <label for="mode">Formato</label>
+                <select id="mode">
+                  <option value="">Cualquiera</option>
+                  <option value="online">Online</option>
+                  <option value="in-person">Presencial</option>
+                  <option value="hybrid">Híbrido</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="language">Idioma</label>
+                <select id="language">
+                  <option value="">Cualquiera</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="country">País</label>
+                <select id="country">
+                  <option value="">Cualquiera</option>
+                </select>
+              </div>
+              <label class="check"><input id="cfp" type="checkbox"> CFP abierto</label>
+              <label class="check"><input id="future" type="checkbox" checked> Solo futuros</label>
+              <button class="ghost" type="button" id="save-filter">Guardar filtro</button>
+            </div>
+          </details>
+          <div class="view-switch" role="group" aria-label="Vista">
+            <button type="button" data-view="cards">Tarjetas</button>
+            <button type="button" data-view="feed">RSS</button>
+            <button type="button" data-view="calendar">Calendario</button>
+          </div>
+        </div>
+      </section>
       <div class="results-head">
         <h2 id="result-count">Eventos</h2>
         <div class="results-actions">
@@ -169,9 +171,15 @@
 <dialog class="modal" id="help-modal">
   <section class="modal-card">
     <div class="modal-head">
-      <h2>Ayuda</h2>
+      <h2>Ayuda y ajustes</h2>
       <button class="icon-button" type="button" data-close="help-modal" aria-label="Cerrar">×</button>
     </div>
+    <h3>Ajustes de lectura</h3>
+    <label for="app-width">Ancho del contenido</label>
+    <select id="app-width">
+      <option value="comfortable">Cómodo</option>
+      <option value="full">Pantalla completa</option>
+    </select>
     <h3>Descubrimiento OTE</h3>
     <p>Una web puede anunciar su feed desde el <code>&lt;head&gt;</code>:</p>
     <pre><code>&lt;link rel="alternate"
