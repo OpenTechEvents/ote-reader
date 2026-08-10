@@ -294,7 +294,8 @@
       count: sourceCount({ type: 'all', id: 'all' }),
       active: isActiveSource('all', 'all'),
       onClick: function () { setActiveSource('all', 'all'); closeSidebar(); },
-      className: 'library-all'
+      className: 'library-all',
+      context: { type: 'all', id: 'all' }
     }));
 
     state.categories.forEach(function (category) {
@@ -305,7 +306,10 @@
         active: isActiveSource('category', category.id),
         onClick: function () { setActiveSource('category', category.id); closeSidebar(); },
         className: 'category-row',
-        menu: function () { openCategoryOptions(category); },
+        menu: function (event) { openContextMenu(event, { type: 'category', id: category.id }); },
+        chevron: category.open !== false ? '⌄' : '›',
+        onChevron: function () { toggleCategory(category); },
+        context: { type: 'category', id: category.id },
         dropCategoryId: category.id
       }));
 
@@ -321,7 +325,8 @@
             unread: feedHasUnread(feed),
             onClick: function () { setActiveSource('feed', feed.url); closeSidebar(); },
             className: 'feed-row nested',
-            menu: function () { openFeedOptions(feed); },
+            menu: function (event) { openContextMenu(event, { type: 'feed', id: feed.url }); },
+            context: { type: 'feed', id: feed.url },
             dragUrl: feed.url
           }));
         });
@@ -332,6 +337,12 @@
   function libraryRow(options) {
     var row = document.createElement('div');
     row.className = 'library-row ' + (options.className || '') + (options.active ? ' is-active' : '');
+    if (options.context) {
+      row.addEventListener('contextmenu', function (event) {
+        event.preventDefault();
+        openContextMenu(event, options.context);
+      });
+    }
     if (options.unread) row.classList.add('has-unread');
     if (options.dragUrl) {
       row.draggable = true;
@@ -360,6 +371,18 @@
     main.type = 'button';
     main.className = 'library-main';
     main.addEventListener('click', options.onClick);
+    if (options.chevron) {
+      var chevron = document.createElement('button');
+      chevron.className = 'chevron-button';
+      chevron.type = 'button';
+      chevron.textContent = options.chevron;
+      chevron.setAttribute('aria-label', options.chevron === '›' ? 'Expandir folder' : 'Plegar folder');
+      chevron.addEventListener('click', function (event) {
+        event.stopPropagation();
+        options.onChevron();
+      });
+      row.appendChild(chevron);
+    }
     var body = document.createElement('span');
     body.className = 'library-body';
     var title = document.createElement('span');
@@ -385,7 +408,7 @@
       menu.setAttribute('aria-label', 'Opciones');
       menu.addEventListener('click', function (event) {
         event.stopPropagation();
-        options.menu();
+        options.menu(event);
       });
       row.appendChild(menu);
     }
@@ -484,6 +507,83 @@
     render();
   }
 
+  function openContextMenu(event, context) {
+    event.preventDefault();
+    optionsContext = context;
+    var menu = $('context-menu');
+    menu.replaceChildren();
+    contextMenuItems(context).forEach(function (item) {
+      if (item === 'separator') {
+        var separator = document.createElement('div');
+        separator.className = 'context-separator';
+        menu.appendChild(separator);
+        return;
+      }
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = item.danger ? 'context-danger' : '';
+      button.innerHTML = '<span class="context-icon">' + item.icon + '</span><span>' + item.label + '</span>';
+      button.addEventListener('click', function () {
+        closeContextMenu();
+        item.action();
+      });
+      menu.appendChild(button);
+    });
+    positionContextMenu(menu, event.clientX, event.clientY);
+    menu.hidden = false;
+  }
+
+  function contextMenuItems(context) {
+    if (context.type === 'all') {
+      return [
+        { icon: '✓', label: 'Mark as Read', action: markVisibleFeedsRead },
+        { icon: '↻', label: 'Refresh feeds', action: function () { state.feeds.forEach(loadFeed); } },
+        { icon: '⚙', label: 'Manage Feeds', action: openSources }
+      ];
+    }
+    if (context.type === 'category') {
+      var category = findCategory(context.id);
+      return [
+        { icon: '✓', label: 'Mark as Read', action: function () { markCategoryRead(category); } },
+        { icon: '⟷', label: 'Rename', action: function () { openCategoryOptions(category); } },
+        { icon: '☊', label: 'Manage Feeds', action: openSources },
+        { icon: '⚙', label: 'Folder settings', action: function () { openCategoryOptions(category); } },
+        'separator',
+        { icon: '⌫', label: 'Delete', danger: true, action: function () { deleteCategoryWithConfirm(category); } }
+      ];
+    }
+    var feed = findFeed(context.id);
+    return [
+      { icon: '✓', label: 'Mark as Read', action: function () { markFeedRead(feed); } },
+      { icon: '⟷', label: 'Rename', action: function () { openFeedOptions(feed); } },
+      { icon: '♡', label: 'Add to Favorites', action: function () { moveFeedToCategory(feed.url, 'Favorites'); persist(); render(); } },
+      { icon: '⚙', label: 'Manage Feed', action: function () { openFeedOptions(feed); } },
+      { icon: '↻', label: 'Refresh', action: function () { loadFeed(feed); } },
+      'separator',
+      { icon: '⌫', label: 'Delete', danger: true, action: function () { deleteFeedWithConfirm(feed); } }
+    ];
+  }
+
+  function positionContextMenu(menu, x, y) {
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    var width = 280;
+    var height = Math.min(420, menu.childElementCount * 52);
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - width - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - height - 8)) + 'px';
+  }
+
+  function closeContextMenu() {
+    $('context-menu').hidden = true;
+  }
+
+  function toggleCategory(category) {
+    if (!category) return;
+    category.open = category.open === false;
+    persist();
+    renderLibrary();
+  }
+
   function createFolder() {
     var name = prompt('Nombre del folder\n\nIdeas: ' + FOLDER_EXAMPLES.join(', '), 'Conferencias');
     if (!name) return;
@@ -535,6 +635,16 @@
     renderLibrary();
   }
 
+  function markCategoryRead(category) {
+    if (!category) return;
+    (category.feedUrls || []).forEach(function (url) {
+      var feed = findFeed(url);
+      if (feed) feed.lastSeenAt = new Date().toISOString();
+    });
+    persist();
+    render();
+  }
+
   function markVisibleFeedsRead() {
     var urls = activeFeedUrls();
     urls.forEach(function (url) {
@@ -565,6 +675,18 @@
       category.feedUrls = (category.feedUrls || []).filter(function (url) { return url !== feed.url; });
     });
     if (isActiveSource('feed', feed.url)) state.activeSource = { type: 'all', id: 'all' };
+    persist();
+    render();
+  }
+
+  function deleteFeedWithConfirm(feed) {
+    if (!feed || !confirm('Eliminar esta suscripción?')) return;
+    deleteFeed(feed);
+  }
+
+  function deleteCategoryWithConfirm(category) {
+    if (!category || !confirm('Eliminar este folder? Los feeds se moverán al primer folder.')) return;
+    removeCategory(category.id);
     persist();
     render();
   }
@@ -985,6 +1107,11 @@
     $('find-sources-open').addEventListener('click', openSources);
     $('folder-create').addEventListener('click', createFolder);
     $('sidebar-toggle').addEventListener('click', toggleSidebar);
+    $('sidebar-collapse').addEventListener('click', toggleSidebar);
+    $('sidebar-more').addEventListener('click', function (event) {
+      event.stopPropagation();
+      openContextMenu(event, { type: 'all', id: 'all' });
+    });
     $('sidebar-scrim').addEventListener('click', closeSidebar);
     $('help-open').addEventListener('click', function () { openModal('help-modal'); });
     document.querySelectorAll('[data-close]').forEach(function (button) {
@@ -1032,14 +1159,6 @@
       markFeedRead(optionsContext && findFeed(optionsContext.id));
       closeModal('options-modal');
     });
-    $('options-toggle-folder').addEventListener('click', function () {
-      var category = optionsContext && findCategory(optionsContext.id);
-      if (!category) return;
-      category.open = category.open === false;
-      closeModal('options-modal');
-      persist();
-      render();
-    });
     $('options-delete').addEventListener('click', function () {
       if (!optionsContext || !confirm('Eliminar?')) return;
       if (optionsContext.type === 'feed') deleteFeed(findFeed(optionsContext.id));
@@ -1065,6 +1184,12 @@
     $('install-dismiss').addEventListener('click', function () {
       try { localStorage.setItem(INSTALL_DISMISSED, '1'); } catch (e) { /* storage unavailable */ }
       updateInstallUi();
+    });
+    document.addEventListener('click', function (event) {
+      if (!$('context-menu').hidden && !event.target.closest('#context-menu')) closeContextMenu();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeContextMenu();
     });
   }
 
@@ -1159,18 +1284,21 @@
     document.body.classList.toggle('sidebar-collapsed');
     var collapsed = document.body.classList.contains('sidebar-collapsed');
     $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
+    $('sidebar-collapse').setAttribute('aria-expanded', String(!collapsed));
   }
 
   function openSidebar() {
     $('sidebar').classList.add('is-open');
     $('sidebar-scrim').hidden = false;
     $('sidebar-toggle').setAttribute('aria-expanded', 'true');
+    $('sidebar-collapse').setAttribute('aria-expanded', 'true');
   }
 
   function closeSidebar() {
     $('sidebar').classList.remove('is-open');
     $('sidebar-scrim').hidden = true;
     $('sidebar-toggle').setAttribute('aria-expanded', 'false');
+    $('sidebar-collapse').setAttribute('aria-expanded', 'false');
   }
 
   function applySubscribeParam() {

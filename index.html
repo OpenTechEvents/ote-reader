@@ -82,12 +82,16 @@
       <section class="side-block">
         <div class="side-head">
           <h2>Feeds</h2>
-          <div class="add-menu-wrap">
+          <div class="side-tools">
+            <button class="icon-button sidebar-collapse-button" type="button" id="sidebar-collapse" aria-label="Colapsar barra lateral" aria-expanded="true">◧</button>
+            <button class="icon-button subtle-menu" type="button" id="sidebar-more" aria-label="Opciones de feeds">...</button>
+            <div class="add-menu-wrap">
             <button class="icon-button" type="button" id="add-menu-button" aria-label="Añadir">+</button>
             <div class="add-menu" role="menu" aria-label="Añadir feed o folder">
               <button type="button" id="folder-create" role="menuitem">Create New Folder</button>
               <button type="button" id="subscribe-open-side" role="menuitem">Manual subscription</button>
               <button type="button" id="find-sources-open" role="menuitem">Discover new feeds</button>
+            </div>
             </div>
           </div>
         </div>
@@ -114,6 +118,7 @@
     </section>
   </section>
   <div class="scrim" id="sidebar-scrim" hidden></div>
+  <div class="context-menu" id="context-menu" hidden></div>
 </main>
 
 <dialog class="modal" id="subscribe-modal">
@@ -156,7 +161,6 @@
       <button type="submit">Guardar</button>
       <button class="ghost feed-only" type="button" id="options-refresh">Actualizar</button>
       <button class="ghost feed-only" type="button" id="options-mark-read">Marcar visto</button>
-      <button class="ghost folder-only" type="button" id="options-toggle-folder">Plegar/expandir</button>
       <button class="danger" type="button" id="options-delete">Eliminar</button>
     </div>
   </form>
@@ -175,6 +179,8 @@
   href="/events.json"&gt;</code></pre>
     <h3>Vistas</h3>
     <p><strong>Tarjetas</strong> prioriza lectura visual. <strong>RSS</strong> ordena por últimos cambios. <strong>Calendario</strong> agrupa por mes.</p>
+    <h3>Open source</h3>
+    <p>OTE Reader es un proyecto abierto. Puedes hacer fork del repositorio para personalizar feeds iniciales, estilos o flujos para tu comunidad.</p>
     <div class="help-install" id="help-install" hidden>
       <h3>Instalación</h3>
       <p>OTE Reader puede instalarse como aplicación en este dispositivo.</p>
