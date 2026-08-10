@@ -69,6 +69,14 @@ code, pre { font-family: var(--mono); }
   z-index: 10;
 }
 .skip:focus { left: 12px; top: 12px; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 .app-header {
   position: sticky;
@@ -217,7 +225,7 @@ label {
 }
 .search-field {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
 .toolbar-actions {
@@ -688,15 +696,14 @@ label {
 
 .chips {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 7px;
+  flex-wrap: wrap;
+  gap: 6px;
   margin: 0;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
+  max-height: 62px;
+  overflow: hidden;
 }
 .chip {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-height: 26px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -712,7 +719,7 @@ label {
   border-color: var(--accent);
 }
 .hint-line {
-  margin: -2px 0 0;
+  margin: -3px 0 0;
   color: var(--faint);
   font-size: .78rem;
 }
