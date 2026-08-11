@@ -1619,7 +1619,12 @@
   function applySubscribeParam() {
     var params = new URLSearchParams(location.search);
     var url = params.get('subscribe') || params.get('feed');
-    if (url) subscribe(url);
+    if (!url) return;
+    var normalised;
+    try { normalised = normaliseUrl(url); } catch (e) { normalised = null; }
+    if (normalised && state.feeds.some(function (feed) { return feed.url === normalised; })) return;
+    $('feed-url').value = url;
+    openModal('subscribe-modal');
   }
 
   async function boot() {
