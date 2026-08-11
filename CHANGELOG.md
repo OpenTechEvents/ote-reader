@@ -1,6 +1,6 @@
 # OTE Reader changelog
 
-## Unreleased
+## 0.2.0 - 2026-08-12
 
 ### Fixed
 

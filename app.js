@@ -1,6 +1,7 @@
 (function () {
   'use strict';
 
+  var APP_VERSION = '0.2.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -1619,6 +1620,10 @@
     $('demo-bar').hidden = !DEMO_MODE;
   }
 
+  function initVersionUi() {
+    $('app-version').textContent = 'v' + APP_VERSION;
+  }
+
   function exitDemo(event) {
     var target = location.origin + '/';
     if (window.top !== window.self) {
@@ -1679,6 +1684,7 @@
   async function boot() {
     initTheme();
     initWidthPreference();
+    initVersionUi();
     loadState();
     bind();
     updateInstallUi();
