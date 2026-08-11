@@ -1136,7 +1136,6 @@
       var event = context.originalEvent;
       if (!event) return [];
       var badges = [];
-      if (event._feedTitle) badges.push({ label: event._feedTitle, icon: 'folder' });
       if (cfpIsOpen(event)) badges.push({ label: 'CFP abierto', icon: 'check', tone: 'success' });
       if (event.status === 'cancelled') badges.push({ label: 'Cancelado', tone: 'warning' });
       return badges;

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Removed the per-card feed-name badge: it was redundant with the sidebar
+  grouping and, for feeds with a long title, could squeeze the card layout.
+- Upgraded the `<ote-events>` embed to
+  [v0.3.1](https://github.com/OpenTechEvents/ote-tools/releases/tag/embed-v0.3.1),
+  which keeps any long custom badge label from breaking the card/list layout.
+
 ### Changed
 
 - `?subscribe=` / `?feed=` URL parameters now open the manual subscription
