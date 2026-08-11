@@ -1,17 +1,18 @@
 (function () {
   'use strict';
 
-  var STORAGE = 'ote-reader-state-v1';
+  var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
+  var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
   var THEME_STORAGE = 'ote-reader-theme-v1';
   var WIDTH_STORAGE = 'ote-reader-width-v1';
   var ADOPTERS_URL = 'https://opentechevents.org/data/adopters.json';
-  var DEFAULT_FEEDS = [
-    { url: new URL('demo-feed.json', location.href).href, title: 'Feed demo' }
+  var DEMO_FEEDS = [
+    { url: new URL('demo-feed.json', document.baseURI).href, title: 'Feed demo' }
   ];
   var DIRECTORY_DEMO_FEEDS = [
-    { url: new URL('eventos-wiki-demo-feed.json', location.href).href, title: 'Eventos Wiki demo' },
-    { url: new URL('techconf-demo-feed.json', location.href).href, title: 'TechConf España demo' }
+    { url: new URL('eventos-wiki-demo-feed.json', document.baseURI).href, title: 'Eventos Wiki demo' },
+    { url: new URL('techconf-demo-feed.json', document.baseURI).href, title: 'TechConf España demo' }
   ];
   var DIRECTORY_FOLDER = 'Directorios OTE';
   var DEFAULT_FOLDERS = ['Conferencias', 'Eventos Almería', 'CFP para charlas'];
@@ -96,13 +97,13 @@
     } catch (e) {
       showMessage('No se pudo leer el estado guardado. Se usará una sesión limpia.', 'warn');
     }
-    if (!state.feeds.length) {
-      DEFAULT_FEEDS.forEach(function (feed) {
+    if (DEMO_MODE && !state.feeds.length) {
+      DEMO_FEEDS.forEach(function (feed) {
         state.feeds.push({ url: feed.url, title: feed.title, status: 'pending' });
       });
     }
     migrateCategories();
-    seedDirectoryDemoFeeds();
+    if (DEMO_MODE) seedDirectoryDemoFeeds();
     migrateBoards();
     persist();
   }
@@ -120,7 +121,7 @@
   }
 
   function migrateCategories() {
-    if (!state.categories.length) {
+    if (!state.categories.length && state.feeds.length) {
       state.categories.push({
         id: 'community',
         name: 'Community feeds',
@@ -128,7 +129,8 @@
         feedUrls: state.feeds.map(function (feed) { return feed.url; })
       });
     }
-    seedDefaultFolders();
+    if (DEMO_MODE) seedDefaultFolders();
+    if (!state.categories.length) return;
     var known = new Set(state.categories.flatMap(function (category) { return category.feedUrls || []; }));
     var missing = state.feeds.map(function (feed) { return feed.url; }).filter(function (url) { return !known.has(url); });
     if (missing.length) state.categories[0].feedUrls = unique((state.categories[0].feedUrls || []).concat(missing));
@@ -1087,7 +1089,8 @@
     if (!events.length) {
       widget.events = [];
       widget.setAttribute('empty-message', 'No hay eventos con esos filtros.');
-      showMessage('No hay eventos con esos filtros.', 'warn', true);
+      if (!state.feeds.length) showEmptyState();
+      else showMessage('No hay eventos con esos filtros.', 'warn', true);
       return;
     }
     clearMessages();
@@ -1342,6 +1345,40 @@
     $('messages').replaceChildren();
   }
 
+  function showEmptyState() {
+    var box = $('messages');
+    box.replaceChildren();
+    var empty = document.createElement('section');
+    empty.className = 'empty-state';
+    var title = document.createElement('h3');
+    title.textContent = DEMO_MODE ? 'Demo sin eventos cargados' : 'Empieza con tus propias fuentes OTE';
+    var copy = document.createElement('p');
+    copy.textContent = DEMO_MODE
+      ? 'La demo usa feeds de ejemplo para enseñar folders, vistas y colecciones.'
+      : 'Suscríbete a feeds OTE, descubre fuentes publicadas o abre una demo con datos de ejemplo.';
+    var actions = document.createElement('div');
+    actions.className = 'empty-actions';
+    var manual = document.createElement('button');
+    manual.type = 'button';
+    manual.textContent = 'Añadir feed';
+    manual.addEventListener('click', function () { openModal('subscribe-modal'); });
+    var discover = document.createElement('button');
+    discover.type = 'button';
+    discover.className = 'ghost';
+    discover.textContent = 'Discover new feeds';
+    discover.addEventListener('click', openSources);
+    actions.append(manual, discover);
+    if (!DEMO_MODE) {
+      var demo = document.createElement('a');
+      demo.className = 'ghost-link';
+      demo.href = 'demo/';
+      demo.textContent = 'Ver demo';
+      actions.appendChild(demo);
+    }
+    empty.append(title, copy, actions);
+    box.appendChild(empty);
+  }
+
   function subscribe(rawUrl) {
     var url;
     try { url = normaliseUrl(rawUrl); } catch (e) {
@@ -1405,6 +1442,7 @@
   }
 
   function bind() {
+    $('demo-exit').addEventListener('click', exitDemo);
     $('subscribe-open-side').addEventListener('click', function () { openModal('subscribe-modal'); });
     $('find-sources-open').addEventListener('click', openSources);
     $('sidebar-toggle').addEventListener('click', toggleSidebar);
@@ -1578,6 +1616,18 @@
     $('help-install').hidden = !canInstall;
   }
 
+  function updateDemoUi() {
+    $('demo-bar').hidden = !DEMO_MODE;
+  }
+
+  function exitDemo(event) {
+    var target = location.origin + '/';
+    if (window.top !== window.self) {
+      event.preventDefault();
+      window.top.location.href = target;
+    }
+  }
+
   async function promptInstall() {
     if (!deferredInstall) return;
     deferredInstall.prompt();
@@ -1633,6 +1683,7 @@
     loadState();
     bind();
     updateInstallUi();
+    updateDemoUi();
     await waitForEmbed();
     render();
     applySubscribeParam();

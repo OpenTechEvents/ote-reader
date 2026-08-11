@@ -160,11 +160,11 @@ button:hover, .primary-link:hover {
   background: var(--field);
   color: var(--ink);
 }
-.primary-action, .install-button, .hello-bar button:not(.icon-button), .help-install button {
+.primary-action, .install-button, .hello-bar button:not(.icon-button), .hello-bar .primary-link, .help-install button {
   background: var(--accent);
   border-color: var(--accent);
 }
-.hello-bar button:not(.icon-button) {
+.hello-bar button:not(.icon-button), .hello-bar .primary-link {
   min-height: 28px;
   padding: 4px 9px;
   border-radius: 6px;
@@ -743,6 +743,29 @@ label {
   color: var(--muted);
 }
 .message.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); color: var(--warn); }
+.empty-state {
+  display: grid;
+  gap: 10px;
+  max-width: 620px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.empty-state h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.empty-state p {
+  margin: 0;
+  color: var(--muted);
+}
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
 
 .chips {
   display: flex;
