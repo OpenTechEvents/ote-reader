@@ -133,6 +133,8 @@
         <div class="results-actions">
           <button class="ghost" type="button" id="mark-all-read">Todos vistos</button>
           <button class="ghost" type="button" id="refresh">Actualizar</button>
+          <button type="button" id="preview-confirm-button" hidden>Confirmar suscripción</button>
+          <button class="ghost" type="button" id="preview-cancel-button" hidden>Cancelar</button>
         </div>
       </div>
       <div id="messages"></div>
@@ -152,8 +154,9 @@
     <label for="feed-url">Feed OTE o web con cabecera OTE</label>
     <div class="url-row">
       <input id="feed-url" name="url" type="url" placeholder="https://comunidad.example/events.json" autocomplete="url">
-      <button type="submit">Añadir</button>
+      <button type="submit" id="subscribe-preview-button">Previsualizar</button>
     </div>
+    <div class="subscribe-preview" id="subscribe-preview" hidden></div>
     <p>También puedes abrir OTE Reader con <code>?subscribe=https://...</code>. La autodetección de webs depende de CORS hasta que exista extensión.</p>
   </form>
 </dialog>

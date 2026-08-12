@@ -1010,6 +1010,9 @@ label {
   gap: 8px;
   margin-top: 16px;
 }
+.modal-actions[hidden] {
+  display: none;
+}
 .modal-actions [hidden] {
   display: none;
 }
@@ -1049,6 +1052,9 @@ label {
   font-size: .82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.subscribe-preview {
+  margin-top: 12px;
 }
 .board-picker {
   display: grid;

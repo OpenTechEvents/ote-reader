@@ -37,6 +37,8 @@
   var editingCategoryId = null;
   var boardEventContext = null;
   var embedReady = false;
+  var subscribeState = { phase: 'idle' };
+  var previewMode = null;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -269,27 +271,30 @@
     return d;
   }
 
+  async function fetchOteDocument(url) {
+    var response = await fetch(url, { headers: { accept: 'application/json,text/html;q=0.9,*/*;q=0.5' } });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    var type = response.headers.get('content-type') || '';
+    if (type.indexOf('html') !== -1) {
+      var html = await response.text();
+      var discovered = discoverInHtml(html, url);
+      if (!discovered.length) throw new Error('No encontré cabecera OTE en esa página');
+      return fetchOteDocument(discovered[0].url);
+    }
+    var raw = await response.json();
+    return { url: url, doc: normaliseDocument(raw, url) };
+  }
+
   async function loadFeed(feed) {
     feed.status = 'loading';
     renderLibrary();
     try {
-      var response = await fetch(feed.url, { headers: { accept: 'application/json,text/html;q=0.9,*/*;q=0.5' } });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      var type = response.headers.get('content-type') || '';
-      var doc;
-      if (type.indexOf('html') !== -1) {
-        var html = await response.text();
-        var discovered = discoverInHtml(html, feed.url);
-        if (!discovered.length) throw new Error('No encontré cabecera OTE en esa página');
-        feed.url = discovered[0].url;
-        return loadFeed(feed);
-      }
-      doc = await response.json();
-      var normalised = normaliseDocument(doc, feed.url);
-      feed.title = feed.customTitle || normalised.title;
+      var result = await fetchOteDocument(feed.url);
+      feed.url = result.url;
+      feed.title = feed.customTitle || result.doc.title;
       feed.status = 'ok';
-      feed.updatedAt = normalised.updatedAt || '';
-      feedCache.set(feed.url, normalised);
+      feed.updatedAt = result.doc.updatedAt || '';
+      feedCache.set(feed.url, result.doc);
     } catch (error) {
       feed.status = 'error';
       feed.error = error.message || String(error);
@@ -340,6 +345,9 @@
   }
 
   function sourceEvents() {
+    if (previewMode) {
+      return (previewMode.doc.events || []).map(function (event) { return inherit(previewMode.doc, event); });
+    }
     var events = allEvents();
     if (!state.activeSource || state.activeSource.type === 'all') return events;
     if (state.activeSource.type === 'feed') {
@@ -571,12 +579,17 @@
   }
 
   function setActiveSource(type, id) {
+    if (previewMode) {
+      previewMode = null;
+      updatePreviewControls();
+    }
     state.activeSource = { type: type, id: id };
     persist();
     render();
   }
 
   function isActiveSource(type, id) {
+    if (previewMode) return false;
     return state.activeSource && state.activeSource.type === type && state.activeSource.id === id;
   }
 
@@ -1090,7 +1103,8 @@
     if (!events.length) {
       widget.events = [];
       widget.setAttribute('empty-message', 'No hay eventos con esos filtros.');
-      if (!state.feeds.length) showEmptyState();
+      if (previewMode) showMessage('Este feed no tiene eventos.', 'warn', true);
+      else if (!state.feeds.length) showEmptyState();
       else showMessage('No hay eventos con esos filtros.', 'warn', true);
       return;
     }
@@ -1110,6 +1124,12 @@
     widget.eventActions = function (context) {
       var event = context.originalEvent;
       if (!event) return [];
+      if (previewMode) {
+        return [
+          { type: 'link', placement: 'detail' },
+          { type: 'ics', placement: 'detail' }
+        ];
+      }
       var saved = state.boards.some(function (board) { return boardHasEvent(board, event); });
       return [
         {
@@ -1394,6 +1414,96 @@
     loadFeed(feed);
   }
 
+  function setSubscribeState(next) {
+    subscribeState = next;
+    renderSubscribeModal();
+  }
+
+  function resetSubscribeModal() {
+    $('feed-url').value = '';
+    setSubscribeState({ phase: 'idle' });
+  }
+
+  function renderSubscribeModal() {
+    var box = $('subscribe-preview');
+    var previewButton = $('subscribe-preview-button');
+    box.replaceChildren();
+    previewButton.disabled = subscribeState.phase === 'loading';
+    if (subscribeState.phase === 'idle') {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    if (subscribeState.phase === 'loading') {
+      box.appendChild(messageNode('Cargando...'));
+      return;
+    }
+    if (subscribeState.phase === 'error') {
+      box.appendChild(messageNode(subscribeState.message, 'warn'));
+    }
+  }
+
+  async function handleSubscribePreview() {
+    var raw = $('feed-url').value;
+    if (!raw.trim()) return;
+    var url;
+    try { url = normaliseUrl(raw); } catch (e) {
+      setSubscribeState({ phase: 'error', message: 'La URL no parece válida.' });
+      return;
+    }
+    var existing = findFeed(url);
+    if (existing) {
+      closeModal('subscribe-modal');
+      loadFeed(existing);
+      setActiveSource('feed', existing.url);
+      showMessage('Ya estabas suscrito a esta fuente. Actualizando...', 'warn', true);
+      return;
+    }
+    setSubscribeState({ phase: 'loading' });
+    try {
+      var result = await fetchOteDocument(url);
+      closeModal('subscribe-modal');
+      enterPreviewMode(result.url, result.doc);
+    } catch (error) {
+      setSubscribeState({ phase: 'error', message: error.message || String(error) });
+    }
+  }
+
+  function enterPreviewMode(url, doc) {
+    previewMode = { url: url, doc: doc };
+    updatePreviewControls();
+    render();
+  }
+
+  function cancelPreview() {
+    if (!previewMode) return;
+    previewMode = null;
+    updatePreviewControls();
+    render();
+  }
+
+  function confirmPreviewSubscription() {
+    if (!previewMode) return;
+    confirmSubscription(previewMode.url, previewMode.doc);
+    setActiveSource('feed', previewMode.url);
+  }
+
+  function updatePreviewControls() {
+    $('mark-all-read').hidden = Boolean(previewMode);
+    $('refresh').hidden = Boolean(previewMode);
+    $('preview-confirm-button').hidden = !previewMode;
+    $('preview-cancel-button').hidden = !previewMode;
+  }
+
+  function confirmSubscription(url, doc) {
+    var feed = { url: url, status: 'ok', title: doc.title, updatedAt: doc.updatedAt || '' };
+    state.feeds.push(feed);
+    ensureDefaultCategory(feed.url);
+    feedCache.set(feed.url, doc);
+    persist();
+    render();
+  }
+
   function unsubscribe(rawUrl) {
     var url = normaliseUrl(rawUrl);
     state.feeds = state.feeds.filter(function (feed) { return feed.url !== url; });
@@ -1413,6 +1523,7 @@
   }
 
   function sourceLabel() {
+    if (previewMode) return previewMode.doc.title || 'Previsualización';
     if (!state.activeSource || state.activeSource.type === 'all') return 'All';
     if (state.activeSource.type === 'feed') {
       var feed = findFeed(state.activeSource.id);
@@ -1439,6 +1550,7 @@
     var modal = $(id);
     if (modal.close) modal.close();
     else modal.removeAttribute('open');
+    if (id === 'subscribe-modal') resetSubscribeModal();
   }
 
   function bind() {
@@ -1469,10 +1581,14 @@
     });
     $('subscribe-form').addEventListener('submit', function (event) {
       event.preventDefault();
-      subscribe($('feed-url').value);
-      $('feed-url').value = '';
-      closeModal('subscribe-modal');
+      handleSubscribePreview();
     });
+    $('feed-url').addEventListener('input', function () {
+      if (subscribeState.phase !== 'idle') setSubscribeState({ phase: 'idle' });
+    });
+    $('subscribe-modal').addEventListener('close', resetSubscribeModal);
+    $('preview-confirm-button').addEventListener('click', confirmPreviewSubscription);
+    $('preview-cancel-button').addEventListener('click', cancelPreview);
     ['q', 'mode', 'language', 'country', 'cfp', 'future'].forEach(function (id) {
       $(id).addEventListener('input', function () {
         state.filters[id] = this.type === 'checkbox' ? this.checked : (id === 'q' ? normaliseQuery(this.value) : this.value);
