@@ -1,5 +1,15 @@
 # OTE Reader changelog
 
+## 0.6.0 - 2026-08-13
+
+### Changed
+
+- Fixed the empty-results message showing twice (once from the events
+  widget, once above it) when filters matched no events. It's replaced
+  with a single message that lists the active filters as removable
+  chips, plus a "Limpiar filtros" shortcut when more than one is
+  applied, so you can fix the filters without opening the filters panel.
+
 ## 0.5.0 - 2026-08-13
 
 ### Added

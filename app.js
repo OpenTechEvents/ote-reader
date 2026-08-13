@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.5.0';
+  var APP_VERSION = '0.6.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -1158,12 +1158,13 @@
     $('result-count').textContent = sourceLabel() + ' · ' + events.length + (events.length === 1 ? ' evento' : ' eventos');
     if (!events.length) {
       widget.events = [];
-      widget.setAttribute('empty-message', 'No hay eventos con esos filtros.');
+      widget.style.display = 'none';
       if (previewMode) showMessage('Este feed no tiene eventos.', 'warn', true);
       else if (!state.feeds.length) showEmptyState();
-      else showMessage('No hay eventos con esos filtros.', 'warn', true);
+      else showFilteredEmptyState();
       return;
     }
+    widget.style.display = '';
     clearMessages();
     if (!embedReady) {
       showMessage('El visor de eventos se está cargando...', 'warn', true);
@@ -1180,7 +1181,6 @@
     widget.setAttribute('show-past', 'true');
     widget.setAttribute('sort', 'none');
     widget.setAttribute('event-actions', 'none');
-    widget.setAttribute('empty-message', 'No hay eventos con esos filtros.');
     widget.events = events;
     widget.eventActions = function (context) {
       var event = context.originalEvent;
@@ -1458,6 +1458,95 @@
     }
     empty.append(title, copy, actions);
     box.appendChild(empty);
+  }
+
+  function showFilteredEmptyState() {
+    var box = $('messages');
+    box.replaceChildren();
+    var empty = document.createElement('section');
+    empty.className = 'empty-state';
+    var active = activeFilterChips();
+
+    var title = document.createElement('h3');
+    title.textContent = active.length ? 'No hay eventos con esos filtros' : 'No hay eventos en este apartado';
+    empty.appendChild(title);
+
+    if (active.length) {
+      var copy = document.createElement('p');
+      copy.textContent = 'Quita alguno para ver resultados:';
+      empty.appendChild(copy);
+      var chips = document.createElement('div');
+      chips.className = 'chips';
+      chips.style.maxHeight = 'none';
+      active.forEach(function (item) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip is-active';
+        chip.textContent = item.label + ' ×';
+        chip.setAttribute('aria-label', 'Quitar filtro: ' + item.label);
+        chip.addEventListener('click', function () {
+          item.clear();
+          persist();
+          render();
+        });
+        chips.appendChild(chip);
+      });
+      empty.appendChild(chips);
+
+      if (active.length > 1) {
+        var actions = document.createElement('div');
+        actions.className = 'empty-actions';
+        var clearAll = document.createElement('button');
+        clearAll.type = 'button';
+        clearAll.className = 'ghost';
+        clearAll.textContent = 'Limpiar filtros';
+        clearAll.addEventListener('click', function () {
+          resetFilters();
+          persist();
+          render();
+        });
+        actions.appendChild(clearAll);
+        empty.appendChild(actions);
+      }
+    }
+
+    box.appendChild(empty);
+  }
+
+  function activeFilterChips() {
+    var list = [];
+    queryTerms(state.filters.q).forEach(function (term) {
+      list.push({ label: '#' + term, clear: function () { toggleQueryTerm(term); } });
+    });
+    var modeLabels = { online: 'Online', 'in-person': 'Presencial', hybrid: 'Híbrido' };
+    if (state.filters.mode) {
+      list.push({
+        label: 'Formato: ' + (modeLabels[state.filters.mode] || state.filters.mode),
+        clear: function () { state.filters.mode = ''; }
+      });
+    }
+    if (state.filters.language) {
+      list.push({ label: 'Idioma: ' + state.filters.language, clear: function () { state.filters.language = ''; } });
+    }
+    if (state.filters.country) {
+      list.push({ label: 'País: ' + state.filters.country, clear: function () { state.filters.country = ''; } });
+    }
+    if (state.filters.cfp) {
+      list.push({ label: 'CFP abierto', clear: function () { state.filters.cfp = false; } });
+    }
+    if (state.filters.future) {
+      list.push({ label: 'Solo futuros', clear: function () { state.filters.future = false; } });
+    }
+    return list;
+  }
+
+  function resetFilters() {
+    state.filters.q = '';
+    state.filters.mode = '';
+    state.filters.language = '';
+    state.filters.country = '';
+    state.filters.cfp = false;
+    state.filters.future = false;
   }
 
   function subscribe(rawUrl, categoryId) {
