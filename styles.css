@@ -797,6 +797,9 @@ label {
   color: var(--faint);
   font-size: .78rem;
 }
+.hint-line.hint-danger {
+  color: var(--danger);
+}
 
 .events {
   display: grid;

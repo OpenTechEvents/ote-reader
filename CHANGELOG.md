@@ -1,5 +1,14 @@
 # OTE Reader changelog
 
+## 0.5.0 - 2026-08-13
+
+### Added
+
+- The feed "Edit" modal now lets you change the feed's URL, so you can fix
+  a subscription after its address moves without having to unsubscribe and
+  resubscribe. When a feed fails to load, the modal shows the fetch error
+  inline as a hint.
+
 ## 0.4.0 - 2026-08-13
 
 ### Added

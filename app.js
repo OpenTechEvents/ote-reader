@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.4.0';
+  var APP_VERSION = '0.5.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -644,6 +644,14 @@
     optionsContext = { type: 'feed', id: feed.url };
     $('options-title').textContent = feed.title || 'Feed OTE';
     $('options-name').value = feed.title || '';
+    $('options-url').value = feed.url || '';
+    var errorHint = $('options-error');
+    if (feed.status === 'error' && feed.error) {
+      errorHint.textContent = 'No se pudo cargar: ' + feed.error + '. Puedes corregir la URL.';
+      errorHint.hidden = false;
+    } else {
+      errorHint.hidden = true;
+    }
     fillFolderOptions(feed.url);
     openModal('options-modal');
   }
@@ -669,10 +677,50 @@
       feed.customTitle = name;
       feed.title = name;
     }
+    var urlChanged = false;
+    var rawUrl = $('options-url').value.trim();
+    var errorHint = $('options-error');
+    if (rawUrl) {
+      var newUrl;
+      try { newUrl = normaliseUrl(rawUrl); } catch (e) {
+        errorHint.textContent = 'La URL no parece válida.';
+        errorHint.hidden = false;
+        return;
+      }
+      if (newUrl !== feed.url) {
+        if (state.feeds.some(function (item) { return item !== feed && item.url === newUrl; })) {
+          errorHint.textContent = 'Ya hay una suscripción con esa URL.';
+          errorHint.hidden = false;
+          return;
+        }
+        renameFeedUrl(feed, newUrl);
+        urlChanged = true;
+      }
+    }
     moveFeedToCategoryId(feed.url, $('options-folder').value);
     closeModal('options-modal');
     persist();
     render();
+    if (urlChanged) loadFeed(feed);
+  }
+
+  function renameFeedUrl(feed, newUrl) {
+    var oldUrl = feed.url;
+    feedCache.delete(oldUrl);
+    feed.url = newUrl;
+    feed.status = 'pending';
+    feed.error = '';
+    state.categories.forEach(function (category) {
+      category.feedUrls = (category.feedUrls || []).map(function (url) {
+        return url === oldUrl ? newUrl : url;
+      });
+    });
+    state.boards.forEach(function (board) {
+      (board.eventRefs || []).forEach(function (ref) {
+        if (ref.feedUrl === oldUrl) ref.feedUrl = newUrl;
+      });
+    });
+    if (isActiveSource('feed', oldUrl)) state.activeSource = { type: 'feed', id: newUrl };
   }
 
   function openContextMenu(event, context) {
