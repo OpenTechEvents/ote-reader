@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.3.0';
+  var APP_VERSION = '0.3.1';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -645,17 +645,6 @@
     $('options-title').textContent = feed.title || 'Feed OTE';
     $('options-name').value = feed.title || '';
     fillFolderOptions(feed.url);
-    document.querySelectorAll('.feed-only').forEach(function (node) { node.hidden = false; });
-    document.querySelectorAll('.folder-only').forEach(function (node) { node.hidden = true; });
-    openModal('options-modal');
-  }
-
-  function openCategoryOptions(category) {
-    optionsContext = { type: 'category', id: category.id };
-    $('options-title').textContent = category.name;
-    $('options-name').value = category.name;
-    document.querySelectorAll('.feed-only').forEach(function (node) { node.hidden = true; });
-    document.querySelectorAll('.folder-only').forEach(function (node) { node.hidden = false; });
     openModal('options-modal');
   }
 
@@ -673,19 +662,14 @@
 
   function saveOptions() {
     if (!optionsContext) return;
+    var feed = findFeed(optionsContext.id);
+    if (!feed) return;
     var name = $('options-name').value.trim();
-    if (optionsContext.type === 'feed') {
-      var feed = findFeed(optionsContext.id);
-      if (!feed) return;
-      if (name) {
-        feed.customTitle = name;
-        feed.title = name;
-      }
-      moveFeedToCategoryId(feed.url, $('options-folder').value);
-    } else {
-      var category = findCategory(optionsContext.id);
-      if (category && name) category.name = name;
+    if (name) {
+      feed.customTitle = name;
+      feed.title = name;
     }
+    moveFeedToCategoryId(feed.url, $('options-folder').value);
     closeModal('options-modal');
     persist();
     render();
@@ -721,9 +705,7 @@
     if (context.type === 'all') {
       return [
         { icon: '✓', label: 'Mark as Read', action: markVisibleFeedsRead },
-        { icon: '+', label: 'Create New Folder', action: createFolder },
-        { icon: '↻', label: 'Refresh feeds', action: function () { state.feeds.forEach(loadFeed); } },
-        { icon: '⚙', label: 'Manage Feeds', action: openSources }
+        { icon: '↻', label: 'Refresh feeds', action: function () { state.feeds.forEach(loadFeed); } }
       ];
     }
     if (context.type === 'category') {
@@ -731,8 +713,6 @@
       return [
         { icon: '✓', label: 'Mark as Read', action: function () { markCategoryRead(category); } },
         { icon: '⟷', label: 'Rename', action: function () { startCategoryRename(category); } },
-        { icon: '☊', label: 'Manage Feeds', action: openSources },
-        { icon: '⚙', label: 'Folder settings', action: function () { openCategoryOptions(category); } },
         'separator',
         { icon: '⌫', label: 'Delete', danger: true, action: function () { deleteCategoryWithConfirm(category); } }
       ];
@@ -749,8 +729,7 @@
     var feed = findFeed(context.id);
     return [
       { icon: '✓', label: 'Mark as Read', action: function () { markFeedRead(feed); } },
-      { icon: '⟷', label: 'Rename', action: function () { openFeedOptions(feed); } },
-      { icon: '⚙', label: 'Manage Feed', action: function () { openFeedOptions(feed); } },
+      { icon: '⚙', label: 'Edit', action: function () { openFeedOptions(feed); } },
       { icon: '↻', label: 'Refresh', action: function () { loadFeed(feed); } },
       'separator',
       { icon: '⌫', label: 'Delete', danger: true, action: function () { deleteFeedWithConfirm(feed); } }
@@ -1565,6 +1544,7 @@
     $('demo-exit').addEventListener('click', exitDemo);
     $('subscribe-open-side').addEventListener('click', function () { openModal('subscribe-modal'); });
     $('find-sources-open').addEventListener('click', openSources);
+    $('create-folder-open-side').addEventListener('click', createFolder);
     $('sidebar-toggle').addEventListener('click', toggleSidebar);
     $('sidebar-collapse').addEventListener('click', toggleSidebar);
     $('sidebar-restore').addEventListener('click', toggleSidebar);
@@ -1635,8 +1615,7 @@
     });
     $('options-delete').addEventListener('click', function () {
       if (!optionsContext || !confirm('Eliminar?')) return;
-      if (optionsContext.type === 'feed') deleteFeed(findFeed(optionsContext.id));
-      if (optionsContext.type === 'category') removeCategory(optionsContext.id);
+      deleteFeed(findFeed(optionsContext.id));
       closeModal('options-modal');
       persist();
       render();

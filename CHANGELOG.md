@@ -1,5 +1,15 @@
 # OTE Reader changelog
 
+## 0.3.1 - 2026-08-13
+
+### Changed
+
+- Reorganized the sidebar's "..." menus: moved "Create New Folder" into
+  the "+" menu next to it, dropped "Manage Feeds" and "Folder settings"
+  (they duplicated the discovery catalog and the Rename/Delete actions
+  already in the same menu), and merged the feed menu's "Rename"/"Manage
+  Feed" into a single "Edit" entry.
+
 ## 0.3.0 - 2026-08-13
 
 ### Added
