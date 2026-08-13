@@ -1,5 +1,19 @@
 # OTE Reader changelog
 
+## 0.3.0 - 2026-08-13
+
+### Added
+
+- An "Agrupar series" toggle next to the card view button that collapses
+  events sharing the same `partOf.id` into a single stacked card, enabled
+  by default. Only shown in card view, since grouping only applies there.
+
+### Changed
+
+- Upgraded the `<ote-events>` embed to
+  [v0.4.0](https://github.com/OpenTechEvents/ote-tools/releases/tag/embed-v0.4.0),
+  which adds the `group-events` attribute the series toggle relies on.
+
 ## 0.2.0 - 2026-08-12
 
 ### Fixed

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.2.0';
+  var APP_VERSION = '0.3.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -28,7 +28,8 @@
     filters: { q: '', mode: '', language: '', country: '', cfp: false, future: true },
     savedFilters: [],
     savedEvents: [],
-    view: 'cards'
+    view: 'cards',
+    groupSeries: true
   };
   var feedCache = new Map();
   var adopterCache = null;
@@ -395,6 +396,8 @@
       button.classList.toggle('is-active', button.dataset.view === state.view);
       button.setAttribute('aria-pressed', String(button.dataset.view === state.view));
     });
+    $('group-series-wrap').hidden = state.view !== 'cards';
+    $('group-series').checked = state.groupSeries;
   }
 
   function renderLibrary() {
@@ -1114,6 +1117,11 @@
       return;
     }
     widget.setAttribute('layout', state.view === 'feed' ? 'list' : state.view);
+    if (state.view === 'cards' && state.groupSeries) {
+      widget.setAttribute('group-events', 'series,multipart');
+    } else {
+      widget.removeAttribute('group-events');
+    }
     widget.setAttribute('theme', document.documentElement.dataset.theme || 'light');
     widget.setAttribute('fields', 'image,when,location,attendance,description,price,tags,organizer');
     widget.setAttribute('show-past', 'true');
@@ -1602,6 +1610,11 @@
         persist();
         render();
       });
+    });
+    $('group-series').addEventListener('change', function () {
+      state.groupSeries = this.checked;
+      persist();
+      render();
     });
     $('refresh').addEventListener('click', function () {
       state.feeds.forEach(loadFeed);
