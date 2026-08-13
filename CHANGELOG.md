@@ -1,5 +1,13 @@
 # OTE Reader changelog
 
+## 0.4.0 - 2026-08-13
+
+### Added
+
+- A chevron next to "Suscribirme" in the discover-feeds catalog opens a
+  folder picker, so you can subscribe straight into a specific folder
+  instead of always landing in the default one.
+
 ## 0.3.1 - 2026-08-13
 
 ### Changed

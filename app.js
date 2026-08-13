@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.3.1';
+  var APP_VERSION = '0.4.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -678,9 +678,13 @@
   function openContextMenu(event, context) {
     event.preventDefault();
     optionsContext = context;
+    showMenu(event, contextMenuItems(context));
+  }
+
+  function showMenu(event, items) {
     var menu = $('context-menu');
     menu.replaceChildren();
-    contextMenuItems(context).forEach(function (item) {
+    items.forEach(function (item) {
       if (item === 'separator') {
         var separator = document.createElement('div');
         separator.className = 'context-separator';
@@ -697,8 +701,30 @@
       });
       menu.appendChild(button);
     });
+    // Native <dialog> content renders in the top layer; a menu left under
+    // <body> would be stuck behind an open dialog regardless of z-index.
+    menuHost().appendChild(menu);
     positionContextMenu(menu, event.clientX, event.clientY);
     menu.hidden = false;
+  }
+
+  function menuHost() {
+    return document.querySelector('dialog[open]') || document.body;
+  }
+
+  function openFolderPicker(event, url) {
+    event.stopPropagation();
+    var items = state.categories.map(function (category) {
+      return {
+        icon: '📁',
+        label: category.name,
+        action: function () {
+          subscribe(url, category.id);
+          renderSources();
+        }
+      };
+    });
+    showMenu(event, items);
   }
 
   function contextMenuItems(context) {
@@ -1386,7 +1412,7 @@
     box.appendChild(empty);
   }
 
-  function subscribe(rawUrl) {
+  function subscribe(rawUrl, categoryId) {
     var url;
     try { url = normaliseUrl(rawUrl); } catch (e) {
       showMessage('La URL no parece válida.', 'warn', true);
@@ -1396,7 +1422,8 @@
     if (existing) return loadFeed(existing);
     var feed = { url: url, status: 'pending' };
     state.feeds.push(feed);
-    ensureDefaultCategory(url);
+    if (categoryId && findCategory(categoryId)) moveFeedToCategoryId(url, categoryId);
+    else ensureDefaultCategory(url);
     persist();
     loadFeed(feed);
   }
@@ -1694,16 +1721,37 @@
     var meta = document.createElement('span');
     meta.textContent = compactUrl(url);
     body.append(title, meta);
+
+    if (subscribed) {
+      var action = document.createElement('button');
+      action.type = 'button';
+      action.className = 'ghost';
+      action.textContent = 'Desuscribirme';
+      action.addEventListener('click', function () {
+        unsubscribe(url);
+        renderSources();
+      });
+      row.append(body, action);
+      return row;
+    }
+
+    var group = document.createElement('div');
+    group.className = 'split-button';
     var action = document.createElement('button');
     action.type = 'button';
-    action.className = subscribed ? 'ghost' : '';
-    action.textContent = subscribed ? 'Desuscribirme' : 'Suscribirme';
+    action.textContent = 'Suscribirme';
     action.addEventListener('click', function () {
-      if (subscribed) unsubscribe(url);
-      else subscribe(url);
+      subscribe(url);
       renderSources();
     });
-    row.append(body, action);
+    var chevron = document.createElement('button');
+    chevron.type = 'button';
+    chevron.className = 'split-chevron';
+    chevron.textContent = '▾';
+    chevron.setAttribute('aria-label', 'Elegir folder de destino');
+    chevron.addEventListener('click', function (event) { openFolderPicker(event, url); });
+    group.append(action, chevron);
+    row.append(body, group);
     return row;
   }
 
