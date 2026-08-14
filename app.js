@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.6.0';
+  var APP_VERSION = '0.7.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';

@@ -1,6 +1,6 @@
 {
   "name": "ote-reader",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Attendee-facing PWA for subscribing to OpenTechEvents feeds.",

@@ -1,5 +1,16 @@
 # OTE Reader changelog
 
+## 0.7.0 - 2026-08-14
+
+### Changed
+
+- Upgraded the `<ote-events>` embed to
+  [v0.6.0](https://github.com/OpenTechEvents/ote-tools/releases/tag/embed-v0.6.0),
+  so the "Guardar"/"En colección" action now shows directly on each row in
+  list view (previously it only appeared in card view or after opening an
+  event's detail), matching the same hover-to-reveal behavior cards already
+  had.
+
 ## 0.6.0 - 2026-08-13
 
 ### Changed
