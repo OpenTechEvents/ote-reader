@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.8.0';
+  var APP_VERSION = '0.8.1';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -66,7 +66,7 @@
     var dark = theme === 'dark';
     var toggle = $('theme-toggle');
     if (toggle) {
-      toggle.textContent = dark ? '☀' : '◐';
+      setIcon(toggle, dark ? 'sun' : 'moon');
       toggle.setAttribute('aria-pressed', String(dark));
       toggle.setAttribute('aria-label', dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro');
     }
@@ -78,6 +78,26 @@
     var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
     try { localStorage.setItem(THEME_STORAGE, next); } catch (e) { /* storage unavailable */ }
+  }
+
+  function setIcon(button, name) {
+    var paths = {
+      moon: ['M12 3a6 6 0 0 0 9 7.4 9 9 0 1 1-9-7.4z'],
+      sun: [
+        'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+        'M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41'
+      ]
+    };
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'icon');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    (paths[name] || []).forEach(function (d) {
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+    });
+    button.replaceChildren(svg);
   }
 
   function initWidthPreference() {

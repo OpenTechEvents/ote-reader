@@ -1,5 +1,12 @@
 # OTE Reader changelog
 
+## 0.8.1 - 2026-08-28
+
+### Changed
+
+- Replaced the header action glyphs with Lucide-style SVG icons and kept
+  the theme toggle icon in sync with the active light or dark theme.
+
 ## 0.8.0 - 2026-08-28
 
 ### Added
