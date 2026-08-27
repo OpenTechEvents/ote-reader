@@ -7,6 +7,8 @@
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
   var THEME_STORAGE = 'ote-reader-theme-v1';
   var WIDTH_STORAGE = 'ote-reader-width-v1';
+  var FEED_DB = 'ote-reader-feed-cache-v1';
+  var FEED_STORE = 'feeds';
   var ADOPTERS_URL = 'https://opentechevents.org/data/adopters.json';
   var DEMO_FEEDS = [
     { url: new URL('demo-feed.json', document.baseURI).href, title: 'Feed demo' }
@@ -18,6 +20,9 @@
   var DIRECTORY_FOLDER = 'Directorios OTE';
   var DEFAULT_FOLDERS = ['Conferencias', 'Eventos Almería', 'CFP para charlas'];
   var FOLDER_EXAMPLES = DEFAULT_FOLDERS.concat(['Feeds de directorios OTE', 'Meetups locales', 'Online', 'Eventos para juniors']);
+  var INITIAL_EVENT_LIMIT = 80;
+  var EVENT_PAGE_SIZE = 80;
+  var SEARCH_DEBOUNCE_MS = 140;
   var state = {
     feeds: [],
     categories: [],
@@ -40,6 +45,11 @@
   var embedReady = false;
   var subscribeState = { phase: 'idle' };
   var previewMode = null;
+  var activeFeedLoads = 0;
+  var eventWindow = { key: '', limit: INITIAL_EVENT_LIMIT };
+  var eventObserver = null;
+  var searchTimer = null;
+  var tagsExpanded = false;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -182,6 +192,97 @@
     try { localStorage.setItem(STORAGE, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
   }
 
+  function openFeedDb() {
+    if (!('indexedDB' in window)) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      var request;
+      try {
+        request = indexedDB.open(FEED_DB, 1);
+      } catch (e) {
+        resolve(null);
+        return;
+      }
+      request.onupgradeneeded = function () {
+        var db = request.result;
+        if (!db.objectStoreNames.contains(FEED_STORE)) db.createObjectStore(FEED_STORE, { keyPath: 'url' });
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { resolve(null); };
+      request.onblocked = function () { resolve(null); };
+    });
+  }
+
+  function withFeedStore(mode, callback) {
+    return openFeedDb().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        var tx;
+        try {
+          tx = db.transaction(FEED_STORE, mode);
+        } catch (e) {
+          db.close();
+          resolve(null);
+          return;
+        }
+        var store = tx.objectStore(FEED_STORE);
+        var settled = false;
+        function done(value) {
+          if (settled) return;
+          settled = true;
+          db.close();
+          resolve(value);
+        }
+        tx.oncomplete = function () { done(null); };
+        tx.onerror = function () { done(null); };
+        tx.onabort = function () { done(null); };
+        callback(store, done);
+      });
+    });
+  }
+
+  function readCachedFeed(url) {
+    return withFeedStore('readonly', function (store, done) {
+      var request = store.get(url);
+      request.onsuccess = function () { done(request.result || null); };
+      request.onerror = function () { done(null); };
+    });
+  }
+
+  function writeCachedFeed(url, doc) {
+    withFeedStore('readwrite', function (store, done) {
+      var request = store.put({ url: url, doc: doc, cachedAt: new Date().toISOString() });
+      request.onsuccess = function () { done(null); };
+      request.onerror = function () { done(null); };
+    });
+  }
+
+  function deleteCachedFeed(url) {
+    withFeedStore('readwrite', function (store, done) {
+      var request = store.delete(url);
+      request.onsuccess = function () { done(null); };
+      request.onerror = function () { done(null); };
+    });
+  }
+
+  async function hydrateFeedCache() {
+    if (!state.feeds.length) return;
+    await Promise.all(state.feeds.map(async function (feed) {
+      var cached = await readCachedFeed(feed.url);
+      if (!cached || !cached.doc) return;
+      try {
+        var doc = normaliseDocument(cached.doc, feed.url);
+        feedCache.set(feed.url, doc);
+        if (!feed.title) feed.title = feed.customTitle || doc.title;
+        if (!feed.updatedAt) feed.updatedAt = doc.updatedAt || '';
+        feed.status = 'ok';
+        feed.error = '';
+      } catch (e) {
+        deleteCachedFeed(feed.url);
+      }
+    }));
+    persist();
+  }
+
   function normaliseUrl(value) {
     return new URL(String(value || '').trim(), location.href).href;
   }
@@ -289,17 +390,33 @@
   async function loadFeed(feed) {
     feed.status = 'loading';
     renderLibrary();
+    activeFeedLoads += 1;
+    renderLoadStatus();
+    await nextFrame();
     try {
+      var requestedUrl = feed.url;
       var result = await fetchOteDocument(feed.url);
-      feed.url = result.url;
+      if (result.url !== requestedUrl) {
+        if (state.feeds.some(function (item) { return item !== feed && item.url === result.url; })) {
+          throw new Error('La URL detectada ya está suscrita.');
+        }
+        replaceFeedUrl(feed, requestedUrl, result.url);
+      }
       feed.title = feed.customTitle || result.doc.title;
       feed.status = 'ok';
       feed.updatedAt = result.doc.updatedAt || '';
       feedCache.set(feed.url, result.doc);
+      writeCachedFeed(feed.url, result.doc);
     } catch (error) {
-      feed.status = 'error';
-      feed.error = error.message || String(error);
+      if (feedCache.has(feed.url)) {
+        feed.status = 'ok';
+        feed.error = 'No se pudo actualizar: ' + (error.message || String(error));
+      } else {
+        feed.status = 'error';
+        feed.error = error.message || String(error);
+      }
     }
+    activeFeedLoads = Math.max(0, activeFeedLoads - 1);
     persist();
     render();
   }
@@ -381,7 +498,12 @@
     renderControls();
     renderLibrary();
     renderBoards();
+    renderResults();
+  }
+
+  function renderResults() {
     renderFacets();
+    renderLoadStatus();
     renderEvents();
   }
 
@@ -439,7 +561,7 @@
           if (!feed) return;
           box.appendChild(libraryRow({
             title: feed.title || 'Feed OTE',
-            meta: feed.status === 'error' ? feed.error : '',
+            meta: feed.error || '',
             count: visibleUnreadCount({ type: 'feed', id: feed.url }),
             active: isActiveSource('feed', feed.url),
             unread: feedHasUnread(feed),
@@ -673,10 +795,8 @@
     var feed = findFeed(optionsContext.id);
     if (!feed) return;
     var name = $('options-name').value.trim();
-    if (name) {
-      feed.customTitle = name;
-      feed.title = name;
-    }
+    var previousTitle = feed.title || '';
+    var previousCustomTitle = feed.customTitle || '';
     var urlChanged = false;
     var rawUrl = $('options-url').value.trim();
     var errorHint = $('options-error');
@@ -697,6 +817,16 @@
         urlChanged = true;
       }
     }
+    if (name) {
+      if (urlChanged && name === previousTitle && !previousCustomTitle) {
+        delete feed.customTitle;
+      } else {
+        feed.customTitle = name;
+        feed.title = name;
+      }
+    } else {
+      delete feed.customTitle;
+    }
     moveFeedToCategoryId(feed.url, $('options-folder').value);
     closeModal('options-modal');
     persist();
@@ -706,7 +836,12 @@
 
   function renameFeedUrl(feed, newUrl) {
     var oldUrl = feed.url;
+    replaceFeedUrl(feed, oldUrl, newUrl);
+  }
+
+  function replaceFeedUrl(feed, oldUrl, newUrl) {
     feedCache.delete(oldUrl);
+    deleteCachedFeed(oldUrl);
     feed.url = newUrl;
     feed.status = 'pending';
     feed.error = '';
@@ -939,6 +1074,7 @@
   function deleteFeed(feed) {
     if (!feed) return;
     feedCache.delete(feed.url);
+    deleteCachedFeed(feed.url);
     state.feeds = state.feeds.filter(function (item) { return item.url !== feed.url; });
     state.categories.forEach(function (category) {
       category.feedUrls = (category.feedUrls || []).filter(function (url) { return url !== feed.url; });
@@ -1080,44 +1216,106 @@
     fillSelect('language', unique(events.flatMap(function (e) { return e.languages || []; })), 'Cualquiera');
     fillSelect('country', unique(events.map(countryOf).filter(Boolean)), 'Cualquiera');
     var selected = queryTerms(state.filters.q);
-    var possibleEvents = sourceEvents().filter(function (event) { return matchesWithoutQuery(event); });
-    var tags = unique(possibleEvents.flatMap(function (e) { return e.tags || []; }))
-      .filter(function (tag) {
-        return selected.indexOf(tag.toLowerCase()) !== -1 || wouldReturnResults(tag);
-      })
-      .slice(0, 14);
+    var rankedTags = rankedFacetTags(events);
+    var visibleTagLimit = tagsExpanded ? 80 : 24;
+    var tags = rankedTags.slice(0, visibleTagLimit);
     var cloud = $('tag-cloud');
     cloud.replaceChildren();
-    $('chip-hint').hidden = tags.length === 0;
-    tags.forEach(function (tag) {
-      var key = tag.toLowerCase();
+    renderTagHint(rankedTags.length, tags.length, tagCountThreshold(events.length));
+    cloud.classList.toggle('is-expanded', tagsExpanded);
+    renderTagToggle(rankedTags.length, tags.length);
+    tags.forEach(function (item) {
+      var key = item.key;
       var active = selected.indexOf(key) !== -1;
       var button = document.createElement('button');
+      var countText = String(item.count);
       button.className = 'chip' + (active ? ' is-active' : '');
       button.type = 'button';
-      button.textContent = '#' + tag;
       button.setAttribute('aria-pressed', String(active));
+      button.setAttribute('aria-label', '#' + item.label + ', ' + countText + (item.count === 1 ? ' evento' : ' eventos'));
+      button.title = countText + (item.count === 1 ? ' evento' : ' eventos');
+      var label = document.createElement('span');
+      label.className = 'chip-label';
+      label.textContent = '#' + item.label;
+      var count = document.createElement('span');
+      count.className = 'chip-count';
+      count.textContent = countText;
+      button.append(label, count);
       button.addEventListener('click', function () {
-        toggleQueryTerm(tag);
+        toggleQueryTerm(item.label);
         persist();
-        render();
+        renderControls();
+        renderResults();
       });
       cloud.appendChild(button);
     });
   }
 
-  function matchesWithoutQuery(event) {
-    return matchesWithFilters(event, Object.assign({}, state.filters, { q: '' }));
+  function renderTagToggle(total, visible) {
+    var button = $('tag-toggle');
+    if (!button) return;
+    button.hidden = total <= 24;
+    if (button.hidden) return;
+    button.textContent = tagsExpanded ? 'Menos temas' : 'Más temas (' + (total - visible) + ')';
+    button.setAttribute('aria-expanded', String(tagsExpanded));
   }
 
-  function wouldReturnResults(tag) {
-    var current = queryTerms(state.filters.q);
-    if (current.indexOf(tag.toLowerCase()) !== -1) return true;
-    var next = current.concat([tag.toLowerCase()]).join(' ');
-    var filters = Object.assign({}, state.filters, { q: next });
-    return sourceEvents().some(function (event) {
-      return matchesWithFilters(event, filters);
+  function renderTagHint(total, visible, threshold) {
+    var hint = $('chip-hint');
+    if (!hint) return;
+    hint.hidden = total === 0;
+    if (hint.hidden) return;
+    var hidden = Math.max(0, total - visible);
+    if (hidden) {
+      hint.textContent = 'Mostrando temas con ' + threshold + '+ eventos. Hay ' + hidden + ' más.';
+      return;
+    }
+    hint.textContent = 'Temas ordenados por eventos coincidentes.';
+  }
+
+  function resetTagExpansion() {
+    tagsExpanded = false;
+  }
+
+  function rankedFacetTags(events) {
+    var selected = queryTerms(state.filters.q);
+    var selectedSet = new Set(selected);
+    var baseFilters = Object.assign({}, state.filters, { q: '' });
+    var poolFilters = selected.length ? state.filters : baseFilters;
+    var pool = events.filter(function (event) {
+      return matchesWithFilters(event, poolFilters);
     });
+    if (!pool.length && selected.length) {
+      pool = events.filter(function (event) {
+        return matchesWithFilters(event, baseFilters);
+      });
+    }
+    var counts = new Map();
+    pool.forEach(function (event) {
+      unique(event.tags || []).forEach(function (tag) {
+        var key = tag.toLowerCase();
+        var current = counts.get(key) || { key: key, label: tag, count: 0 };
+        current.count += 1;
+        counts.set(key, current);
+      });
+    });
+    selected.forEach(function (key) {
+      if (!counts.has(key)) counts.set(key, { key: key, label: key, count: 0 });
+    });
+    var threshold = tagCountThreshold(pool.length);
+    return Array.from(counts.values()).filter(function (item) {
+      return selectedSet.has(item.key) || item.count >= threshold;
+    }).sort(function (a, b) {
+      if (selectedSet.has(a.key) !== selectedSet.has(b.key)) return selectedSet.has(a.key) ? -1 : 1;
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label).localeCompare(String(b.label), 'es', { sensitivity: 'base' });
+    });
+  }
+
+  function tagCountThreshold(eventCount) {
+    if (eventCount < 40) return 1;
+    if (eventCount < 160) return 2;
+    return Math.max(2, Math.ceil(eventCount * 0.01));
   }
 
   function toggleQueryTerm(term) {
@@ -1155,10 +1353,18 @@
   function renderEvents() {
     var widget = $('event-list');
     var events = filteredEvents();
-    $('result-count').textContent = sourceLabel() + ' · ' + events.length + (events.length === 1 ? ' evento' : ' eventos');
+    var key = eventWindowKey();
+    if (eventWindow.key !== key) {
+      eventWindow.key = key;
+      eventWindow.limit = INITIAL_EVENT_LIMIT;
+    }
+    var visibleEvents = events.slice(0, eventWindow.limit);
+    updatePagination(events.length, visibleEvents.length);
+    $('result-count').textContent = resultCountText(events.length, visibleEvents.length);
     if (!events.length) {
       widget.events = [];
       widget.style.display = 'none';
+      updatePagination(0, 0);
       if (previewMode) showMessage('Este feed no tiene eventos.', 'warn', true);
       else if (!state.feeds.length) showEmptyState();
       else showFilteredEmptyState();
@@ -1181,7 +1387,7 @@
     widget.setAttribute('show-past', 'true');
     widget.setAttribute('sort', 'none');
     widget.setAttribute('event-actions', 'none');
-    widget.events = events;
+    widget.events = visibleEvents;
     widget.eventActions = function (context) {
       var event = context.originalEvent;
       if (!event) return [];
@@ -1222,6 +1428,57 @@
       if (event.status === 'cancelled') badges.push({ label: 'Cancelado', tone: 'warning' });
       return badges;
     };
+  }
+
+  function eventWindowKey() {
+    return JSON.stringify({
+      source: state.activeSource || { type: 'all', id: 'all' },
+      filters: state.filters,
+      view: state.view,
+      groupSeries: state.groupSeries,
+      preview: previewMode ? previewMode.url : ''
+    });
+  }
+
+  function resultCountText(total, visible) {
+    var label = sourceLabel();
+    var noun = total === 1 ? ' evento' : ' eventos';
+    if (total > visible) return label + ' · ' + visible + ' de ' + total + noun;
+    return label + ' · ' + total + noun;
+  }
+
+  function updatePagination(total, visible) {
+    var actions = $('pagination-actions');
+    var button = $('load-more-events');
+    var sentinel = $('event-sentinel');
+    var remaining = Math.max(0, total - visible);
+    actions.hidden = remaining === 0;
+    if (eventObserver) eventObserver.unobserve(actions);
+    if (!remaining) return;
+    var nextCount = Math.min(EVENT_PAGE_SIZE, remaining);
+    sentinel.textContent = 'Cargando ' + nextCount + ' más...';
+    button.textContent = 'Mostrar ' + nextCount + ' más';
+    button.hidden = Boolean(eventObserver);
+    sentinel.hidden = !eventObserver;
+    if (eventObserver) eventObserver.observe(actions);
+  }
+
+  function showMoreEvents() {
+    eventWindow.limit += EVENT_PAGE_SIZE;
+    renderEvents();
+  }
+
+  function initInfiniteScroll() {
+    if (!('IntersectionObserver' in window)) {
+      $('load-more-events').hidden = false;
+      $('event-sentinel').hidden = true;
+      return;
+    }
+    eventObserver = new IntersectionObserver(function (entries) {
+      if (entries.some(function (entry) { return entry.isIntersecting; })) {
+        showMoreEvents();
+      }
+    }, { rootMargin: '420px 0px' });
   }
 
   function eventIsUnread(event) {
@@ -1586,7 +1843,7 @@
     }
     box.hidden = false;
     if (subscribeState.phase === 'loading') {
-      box.appendChild(messageNode('Cargando...'));
+      box.appendChild(messageNode('Cargando feed. Si contiene muchos eventos puede tardar unos segundos...'));
       return;
     }
     if (subscribeState.phase === 'error') {
@@ -1611,6 +1868,8 @@
       return;
     }
     setSubscribeState({ phase: 'loading' });
+    showMessage('Cargando feed. Se está descargando y validando el fichero...', 'warn', true);
+    await nextFrame();
     try {
       var result = await fetchOteDocument(url);
       closeModal('subscribe-modal');
@@ -1651,8 +1910,35 @@
     state.feeds.push(feed);
     ensureDefaultCategory(feed.url);
     feedCache.set(feed.url, doc);
+    writeCachedFeed(feed.url, doc);
     persist();
     render();
+  }
+
+  function renderLoadStatus() {
+    var box = $('load-status');
+    if (!box) return;
+    var loading = state.feeds.filter(function (feed) { return feed.status === 'loading'; });
+    var count = Math.max(activeFeedLoads, loading.length);
+    if (!count) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    box.hidden = false;
+    box.replaceChildren();
+    var spinner = document.createElement('span');
+    spinner.className = 'load-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    var text = document.createElement('span');
+    text.textContent = count === 1 ? 'Cargando 1 feed...' : 'Cargando ' + count + ' feeds...';
+    box.append(spinner, text);
+  }
+
+  function nextFrame() {
+    return new Promise(function (resolve) {
+      requestAnimationFrame(function () { resolve(); });
+    });
   }
 
   function unsubscribe(rawUrl) {
@@ -1662,6 +1948,7 @@
       category.feedUrls = (category.feedUrls || []).filter(function (feedUrl) { return feedUrl !== url; });
     });
     feedCache.delete(url);
+    deleteCachedFeed(url);
     if (isActiveSource('feed', url)) state.activeSource = { type: 'all', id: 'all' };
     persist();
     render();
@@ -1717,6 +2004,9 @@
       if (name) createBoard(name);
     });
     $('sidebar-scrim').addEventListener('click', closeSidebar);
+    $('refine-scrim').addEventListener('click', closeRefinePanel);
+    $('filter-drawer-toggle').addEventListener('click', toggleRefinePanel);
+    $('refine-close').addEventListener('click', closeRefinePanel);
     $('theme-toggle').addEventListener('click', toggleTheme);
     $('app-width').addEventListener('change', function () {
       applyWidthPreference(this.value);
@@ -1741,11 +2031,27 @@
     $('subscribe-modal').addEventListener('close', resetSubscribeModal);
     $('preview-confirm-button').addEventListener('click', confirmPreviewSubscription);
     $('preview-cancel-button').addEventListener('click', cancelPreview);
-    ['q', 'mode', 'language', 'country', 'cfp', 'future'].forEach(function (id) {
+    $('load-more-events').addEventListener('click', showMoreEvents);
+    $('q').addEventListener('input', function () {
+      scheduleSearch(this.value);
+    });
+    $('tag-toggle').addEventListener('click', function () {
+      tagsExpanded = !tagsExpanded;
+      renderFacets();
+    });
+    $('clear-filters').addEventListener('click', function () {
+      resetFilters();
+      resetTagExpansion();
+      persist();
+      renderControls();
+      renderResults();
+    });
+    ['mode', 'language', 'country', 'cfp', 'future'].forEach(function (id) {
       $(id).addEventListener('input', function () {
-        state.filters[id] = this.type === 'checkbox' ? this.checked : (id === 'q' ? normaliseQuery(this.value) : this.value);
+        state.filters[id] = this.type === 'checkbox' ? this.checked : this.value;
+        resetTagExpansion();
         persist();
-        render();
+        renderResults();
       });
     });
     document.querySelectorAll('[data-view]').forEach(function (button) {
@@ -1816,6 +2122,17 @@
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') closeContextMenu();
     });
+  }
+
+  function scheduleSearch(value) {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      searchTimer = null;
+      state.filters.q = normaliseQuery(value);
+      resetTagExpansion();
+      persist();
+      renderResults();
+    }, SEARCH_DEBOUNCE_MS);
   }
 
   async function openSources() {
@@ -1963,6 +2280,23 @@
     $('sidebar-collapse').setAttribute('aria-expanded', 'false');
   }
 
+  function toggleRefinePanel() {
+    if ($('refine-panel').classList.contains('is-open')) closeRefinePanel();
+    else openRefinePanel();
+  }
+
+  function openRefinePanel() {
+    $('refine-panel').classList.add('is-open');
+    $('refine-scrim').hidden = false;
+    $('filter-drawer-toggle').setAttribute('aria-expanded', 'true');
+  }
+
+  function closeRefinePanel() {
+    $('refine-panel').classList.remove('is-open');
+    $('refine-scrim').hidden = true;
+    $('filter-drawer-toggle').setAttribute('aria-expanded', 'false');
+  }
+
   function applySubscribeParam() {
     var params = new URLSearchParams(location.search);
     var url = params.get('subscribe') || params.get('feed');
@@ -1980,12 +2314,14 @@
     initVersionUi();
     loadState();
     bind();
+    initInfiniteScroll();
     updateInstallUi();
     updateDemoUi();
+    await hydrateFeedCache();
     await waitForEmbed();
     render();
     applySubscribeParam();
-    await Promise.all(state.feeds.map(loadFeed));
+    state.feeds.forEach(loadFeed);
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(function () {});
     }

@@ -1,5 +1,30 @@
 # OTE Reader changelog
 
+## Unreleased
+
+### Added
+
+- Cached loaded feed documents in IndexedDB so returning users see the last
+  known events immediately while feeds refresh in the background.
+- Added infinite scrolling for large event lists, keeping the initial DOM
+  small while preserving search, filters, and view controls.
+- Added a right-side refinement panel for search, topic chips, and filters,
+  with a drawer layout on narrower screens.
+
+### Changed
+
+- Reworked topic chips to show event counts and hide low-signal tags behind
+  a dynamic threshold instead of using decorative colors.
+- Made feed loading and subscription previews show visible progress feedback
+  for large feeds.
+
+### Fixed
+
+- Preserved cached events when a background feed refresh fails, while showing
+  the update error as feed metadata.
+- Fixed URL edits that resolve to a discovered feed URL so categories, active
+  source, collections, and cached feed data stay in sync.
+
 ## 0.7.0 - 2026-08-14
 
 ### Changed

@@ -75,44 +75,10 @@
     <button class="sidebar-restore" type="button" id="sidebar-restore" aria-label="Mostrar barra lateral">☰</button>
 
     <section class="events-column" id="events" aria-live="polite">
-      <section class="control-bar" aria-label="Controles de eventos">
-        <div class="search-field">
-          <label class="visually-hidden" for="q">Buscar</label>
-          <input id="q" type="search" placeholder="python, málaga, kubernetes...">
-          <div class="chips" id="tag-cloud"></div>
-          <p class="hint-line" id="chip-hint" hidden>Los temas se ajustan a los eventos que quedan con tus filtros.</p>
-        </div>
-        <div class="toolbar-actions">
-          <details class="filters-panel" id="filters-panel">
-            <summary>Filtros</summary>
-            <div class="filters-grid">
-              <div class="field">
-                <label for="mode">Formato</label>
-                <select id="mode">
-                  <option value="">Cualquiera</option>
-                  <option value="online">Online</option>
-                  <option value="in-person">Presencial</option>
-                  <option value="hybrid">Híbrido</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="language">Idioma</label>
-                <select id="language">
-                  <option value="">Cualquiera</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="country">País</label>
-                <select id="country">
-                  <option value="">Cualquiera</option>
-                </select>
-              </div>
-              <label class="check"><input id="cfp" type="checkbox"> CFP abierto</label>
-              <label class="check"><input id="future" type="checkbox" checked> Solo futuros</label>
-            </div>
-          </details>
+      <div class="results-head">
+        <h2 id="result-count">Eventos</h2>
+        <div class="results-actions">
           <div class="view-control" role="group" aria-label="Vistas">
-            <span>Vistas:</span>
             <div class="view-switch">
               <button type="button" data-view="cards" aria-label="Vista de tarjetas" title="Tarjetas">
                 <svg class="view-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg>
@@ -127,27 +93,73 @@
                 <span>Calendario</span>
               </button>
             </div>
-            <label class="check" id="group-series-wrap" hidden>
-              <input id="group-series" type="checkbox" checked>
-              Agrupar series
-            </label>
           </div>
-        </div>
-      </section>
-      <div class="results-head">
-        <h2 id="result-count">Eventos</h2>
-        <div class="results-actions">
+          <button class="ghost filter-drawer-button" type="button" id="filter-drawer-toggle" aria-controls="refine-panel" aria-expanded="false">Filtros</button>
           <button class="ghost" type="button" id="mark-all-read">Todos vistos</button>
           <button class="ghost" type="button" id="refresh">Actualizar</button>
           <button type="button" id="preview-confirm-button" hidden>Confirmar suscripción</button>
           <button class="ghost" type="button" id="preview-cancel-button" hidden>Cancelar</button>
         </div>
       </div>
+      <div class="load-status" id="load-status" role="status" aria-live="polite" hidden></div>
       <div id="messages"></div>
       <ote-events class="reader-events" id="event-list" lang="es" sort="none" event-actions="none"></ote-events>
+      <div class="pagination-actions" id="pagination-actions" hidden>
+        <div class="scroll-sentinel" id="event-sentinel" aria-hidden="true">Cargando más eventos...</div>
+        <button class="ghost" type="button" id="load-more-events" hidden>Mostrar más eventos</button>
+      </div>
     </section>
+    <aside class="refine-panel" id="refine-panel" aria-label="Buscar y filtrar eventos">
+      <section class="refine-block search-field">
+        <div class="refine-head">
+          <h2>Explorar</h2>
+          <button class="icon-button refine-close" type="button" id="refine-close" aria-label="Cerrar filtros">×</button>
+        </div>
+        <label class="visually-hidden" for="q">Buscar</label>
+        <input id="q" type="search" placeholder="Buscar eventos, ciudad o tecnología">
+        <div class="chips" id="tag-cloud"></div>
+        <button class="plain-action tag-toggle" type="button" id="tag-toggle" hidden>Más temas</button>
+        <p class="hint-line" id="chip-hint" hidden>Temas ordenados por eventos coincidentes.</p>
+      </section>
+      <section class="refine-block filters-panel" id="filters-panel">
+        <div class="refine-head">
+          <h2>Filtros</h2>
+          <button class="plain-action" type="button" id="clear-filters">Limpiar</button>
+        </div>
+        <div class="filters-grid">
+          <div class="field">
+            <label for="mode">Formato</label>
+            <select id="mode">
+              <option value="">Cualquiera</option>
+              <option value="online">Online</option>
+              <option value="in-person">Presencial</option>
+              <option value="hybrid">Híbrido</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="language">Idioma</label>
+            <select id="language">
+              <option value="">Cualquiera</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="country">País</label>
+            <select id="country">
+              <option value="">Cualquiera</option>
+            </select>
+          </div>
+          <label class="check"><input id="cfp" type="checkbox"> CFP abierto</label>
+          <label class="check"><input id="future" type="checkbox" checked> Solo futuros</label>
+          <label class="check" id="group-series-wrap" hidden>
+            <input id="group-series" type="checkbox" checked>
+            Agrupar series
+          </label>
+        </div>
+      </section>
+    </aside>
   </section>
   <div class="scrim" id="sidebar-scrim" hidden></div>
+  <div class="scrim refine-scrim" id="refine-scrim" hidden></div>
   <div class="context-menu" id="context-menu" hidden></div>
 </main>
 
