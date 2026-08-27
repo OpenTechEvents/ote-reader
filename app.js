@@ -1,12 +1,25 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.8.1';
+  var APP_VERSION = '0.9.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
   var THEME_STORAGE = 'ote-reader-theme-v1';
   var WIDTH_STORAGE = 'ote-reader-width-v1';
+  var DEFAULT_EVENT_FIELDS = ['image', 'when', 'location', 'attendance', 'cfp', 'description', 'price', 'tags', 'organizer'];
+  var EVENT_FIELD_OPTIONS = [
+    { id: 'image', label: 'Imagen' },
+    { id: 'when', label: 'Fecha y hora' },
+    { id: 'location', label: 'Ubicación' },
+    { id: 'attendance', label: 'Formato' },
+    { id: 'description', label: 'Descripción' },
+    { id: 'price', label: 'Precio' },
+    { id: 'tags', label: 'Etiquetas' },
+    { id: 'organizer', label: 'Organizador' },
+    { id: 'cfp', label: 'CFP' },
+    { id: 'eligibility', label: 'Audiencia' }
+  ];
   var FEED_DB = 'ote-reader-feed-cache-v1';
   var FEED_STORE = 'feeds';
   var ADOPTERS_URL = 'https://opentechevents.org/data/adopters.json';
@@ -34,7 +47,8 @@
     savedFilters: [],
     savedEvents: [],
     view: 'cards',
-    groupSeries: true
+    groupSeries: true,
+    eventFields: DEFAULT_EVENT_FIELDS.slice()
   };
   var feedCache = new Map();
   var adopterCache = null;
@@ -126,6 +140,7 @@
         state.savedFilters = state.savedFilters || [];
         state.savedEvents = state.savedEvents || [];
         state.view = state.view || 'cards';
+        state.eventFields = normaliseEventFields(state.eventFields);
         state.filters.q = normaliseQuery(state.filters.q || '');
       }
     } catch (e) {
@@ -139,7 +154,24 @@
     migrateCategories();
     if (DEMO_MODE) seedDirectoryDemoFeeds();
     migrateBoards();
+    state.eventFields = normaliseEventFields(state.eventFields);
     persist();
+  }
+
+  function normaliseEventFields(fields) {
+    var allowed = new Set(EVENT_FIELD_OPTIONS.map(function (field) { return field.id; }));
+    var selected = Array.isArray(fields) ? fields : DEFAULT_EVENT_FIELDS;
+    var normalised = selected.filter(function (field) { return allowed.has(field); });
+    return normalised.length ? uniqueInOrder(normalised) : DEFAULT_EVENT_FIELDS.slice();
+  }
+
+  function uniqueInOrder(values) {
+    var seen = new Set();
+    return values.filter(function (value) {
+      if (seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
   }
 
   function migrateBoards() {
@@ -540,6 +572,34 @@
     });
     $('group-series-wrap').hidden = state.view !== 'cards';
     $('group-series').checked = state.groupSeries;
+    renderSettingsFields();
+  }
+
+  function renderSettingsFields() {
+    var box = $('event-fields');
+    if (!box) return;
+    box.replaceChildren();
+    EVENT_FIELD_OPTIONS.forEach(function (field) {
+      var isSelected = state.eventFields.indexOf(field.id) !== -1;
+      var label = document.createElement('label');
+      label.className = 'check settings-check';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = field.id;
+      input.checked = isSelected;
+      input.disabled = isSelected && state.eventFields.length === 1;
+      input.addEventListener('change', function () {
+        var checked = Array.from(box.querySelectorAll('input:checked')).map(function (checkbox) {
+          return checkbox.value;
+        });
+        state.eventFields = normaliseEventFields(checked);
+        persist();
+        renderEvents();
+        renderSettingsFields();
+      });
+      label.append(input, document.createTextNode(field.label));
+      box.appendChild(label);
+    });
   }
 
   function renderLibrary() {
@@ -1403,7 +1463,8 @@
       widget.removeAttribute('group-events');
     }
     widget.setAttribute('theme', document.documentElement.dataset.theme || 'light');
-    widget.setAttribute('fields', 'image,when,location,attendance,description,price,tags,organizer');
+    widget.setAttribute('fields-preview', normaliseEventFields(state.eventFields).join(','));
+    widget.setAttribute('fields-detail', EVENT_FIELD_OPTIONS.map(function (field) { return field.id; }).join(','));
     widget.setAttribute('show-past', 'true');
     widget.setAttribute('sort', 'none');
     widget.setAttribute('event-actions', 'none');
@@ -1444,7 +1505,6 @@
       var event = context.originalEvent;
       if (!event) return [];
       var badges = [];
-      if (cfpIsOpen(event)) badges.push({ label: 'CFP abierto', icon: 'check', tone: 'success' });
       if (event.status === 'cancelled') badges.push({ label: 'Cancelado', tone: 'warning' });
       return badges;
     };

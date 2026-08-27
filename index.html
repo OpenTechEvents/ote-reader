@@ -235,36 +235,53 @@
   </form>
 </dialog>
 
-<dialog class="modal" id="help-modal">
+<dialog class="modal modal-wide" id="help-modal">
   <section class="modal-card">
     <div class="modal-head">
       <h2>Ajustes</h2>
       <button class="icon-button" type="button" data-close="help-modal" aria-label="Cerrar">×</button>
     </div>
-    <h3>Ajustes de lectura</h3>
-    <label for="app-width">Ancho del contenido</label>
-    <select id="app-width">
-      <option value="comfortable">Cómodo</option>
-      <option value="full">Pantalla completa</option>
-    </select>
-    <h3>Descubrimiento OTE</h3>
-    <p>Una web puede anunciar su feed desde el <code>&lt;head&gt;</code>:</p>
-    <pre><code>&lt;link rel="alternate"
+    <div class="settings-layout">
+      <section class="settings-section">
+        <h3>Lectura</h3>
+        <div class="field">
+          <label for="app-width">Ancho del contenido</label>
+          <select id="app-width">
+            <option value="comfortable">Cómodo</option>
+            <option value="full">Pantalla completa</option>
+          </select>
+        </div>
+      </section>
+      <section class="settings-section">
+        <h3>Tarjetas</h3>
+        <p>Elige qué información opcional se muestra en cada evento.</p>
+        <div class="settings-check-grid" id="event-fields"></div>
+      </section>
+      <section class="settings-section settings-section-muted">
+        <h3>Descubrimiento OTE</h3>
+        <p>Una web puede anunciar su feed desde el <code>&lt;head&gt;</code>:</p>
+        <pre><code>&lt;link rel="alternate"
   type="application/ote+json"
   href="/events.json"&gt;</code></pre>
-    <h3>Vistas</h3>
-    <p><strong>Tarjetas</strong> prioriza lectura visual. <strong>RSS</strong> ordena por últimos cambios. <strong>Calendario</strong> agrupa por mes.</p>
-    <h3>Open source</h3>
-    <p>OTE Reader <span id="app-version"></span> es un proyecto abierto. Puedes hacer fork del repositorio para personalizar feeds iniciales, estilos o flujos para tu comunidad.</p>
-    <div class="link-actions">
-      <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader" target="_blank" rel="noopener">Ver repositorio</a>
-      <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Ver changelog</a>
-      <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader/issues/new" target="_blank" rel="noopener">Reportar bug o mejora</a>
-    </div>
-    <div class="help-install" id="help-install" hidden>
-      <h3>Instalación</h3>
-      <p>OTE Reader puede instalarse como aplicación en este dispositivo.</p>
-      <button type="button" id="install-help-button">Instalar</button>
+      </section>
+      <section class="settings-section settings-section-muted">
+        <h3>Vistas</h3>
+        <p><strong>Tarjetas</strong> prioriza lectura visual. <strong>Novedades</strong> ordena por últimos cambios. <strong>Calendario</strong> agrupa por mes.</p>
+      </section>
+      <section class="settings-section settings-section-muted">
+        <h3>Open source</h3>
+        <p>OTE Reader <span id="app-version"></span> es un proyecto abierto.</p>
+        <div class="link-actions">
+          <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader" target="_blank" rel="noopener">Repositorio</a>
+          <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+          <a class="ghost-link" href="https://github.com/OpenTechEvents/ote-reader/issues/new" target="_blank" rel="noopener">Reportar mejora</a>
+        </div>
+      </section>
+      <section class="settings-section help-install" id="help-install" hidden>
+        <h3>Instalación</h3>
+        <p>OTE Reader puede instalarse como aplicación en este dispositivo.</p>
+        <button type="button" id="install-help-button">Instalar</button>
+      </section>
     </div>
   </section>
 </dialog>

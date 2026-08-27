@@ -1070,7 +1070,7 @@ label {
   background: transparent;
 }
 .modal-wide {
-  width: min(720px, calc(100vw - 28px));
+  width: min(760px, calc(100vw - 28px));
 }
 .modal::backdrop {
   background: rgba(16, 19, 26, .38);
@@ -1101,6 +1101,37 @@ label {
   font-size: .92rem;
 }
 .help-install[hidden] { display: none; }
+.settings-layout {
+  display: grid;
+  gap: 14px;
+}
+.settings-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.settings-section-muted {
+  background: var(--panel-soft);
+}
+.modal-card .settings-section h3 {
+  margin: 0;
+  font-size: .98rem;
+}
+.settings-section p {
+  margin: 0;
+}
+.settings-check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+.settings-check {
+  min-width: 0;
+  white-space: normal;
+}
 .link-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1127,6 +1158,9 @@ label {
 .modal-card h3 {
   margin: 14px 0 4px;
   font-size: .98rem;
+}
+.settings-section pre {
+  margin: 0;
 }
 .modal-card pre {
   overflow-x: auto;
@@ -1390,6 +1424,9 @@ label {
     padding: 9px 11px;
   }
   .url-row {
+    grid-template-columns: 1fr;
+  }
+  .settings-check-grid {
     grid-template-columns: 1fr;
   }
   .source-row {

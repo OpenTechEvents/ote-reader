@@ -1,5 +1,19 @@
 # OTE Reader changelog
 
+## 0.9.0 - 2026-08-28
+
+### Added
+
+- Added card display preferences in the settings modal, letting readers
+  choose which event fields appear in card previews while keeping event
+  details complete.
+
+### Changed
+
+- Reorganized the settings modal into clearer sections for reading
+  preferences, card display options, OTE discovery, views, project links,
+  and installation.
+
 ## 0.8.1 - 2026-08-28
 
 ### Changed
