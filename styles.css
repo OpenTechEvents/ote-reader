@@ -768,6 +768,34 @@ label {
   color: var(--muted);
 }
 .message.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); color: var(--warn); }
+.spec-notice {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: .86rem;
+}
+.spec-notice[hidden] {
+  display: none;
+}
+.spec-notice p {
+  margin: 0;
+}
+.spec-notice p + p {
+  margin-top: 6px;
+}
+.spec-notice.is-warn {
+  border-left-color: var(--warn);
+}
+.spec-notice.is-info {
+  border-left-color: var(--accent);
+}
+.spec-notice a {
+  color: inherit;
+}
 .load-status {
   display: inline-flex;
   align-items: center;

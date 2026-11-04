@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.9.0';
+  var APP_VERSION = '0.10.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -339,17 +339,168 @@
     return new URL(String(value || '').trim(), location.href).href;
   }
 
+  // --- OTE spec version support -----------------------------------------
+  // A document is judged against the version it declares, never against the
+  // latest one: each release pins `specVersion` with a `const` in its schema,
+  // so measuring a healthy 0.4 feed against 0.6 produces one meaningless
+  // error about specVersion and nothing else. That bug has been shipped and
+  // fixed four times in this ecosystem; the reader was the fifth place it
+  // lived (`specVersion === '0.3.0'` as the test for "is this OTE?").
+  //
+  // The policy is the spec repo's, mirrored here rather than reinvented: the
+  // last three minors are supported. It is computed, not listed, so appending
+  // a newly published version below is the only edit a spec release needs —
+  // and `npm run check` fails when this list drifts from what the registry
+  // publishes.
+  var PUBLISHED_SPEC_VERSIONS = ['0.1.0', '0.2.0', '0.3.0', '0.4.0', '0.5.0', '0.6.0'];
+  var SUPPORT_WINDOW_MINORS = 3;
+  var SPEC_CHANGELOG_URL = 'https://github.com/OpenTechEvents/opentechevents-spec/blob/main/CHANGELOG.md';
+  // Fields an event inherits from its feed when it omits its own. These are
+  // exactly the ones carrying `x-inheritsFrom` in the event schema (in 0.6:
+  // specVersion, organizers, textLanguage, license, contributing — the last
+  // one new in 0.5). `npm run check` re-reads the published schema and fails
+  // if this list no longer matches it, so it does not drift by hand.
+  var INHERITED_FEED_FIELDS = ['specVersion', 'license', 'textLanguage', 'organizers', 'contributing'];
+
+  function specMinorOf(version) {
+    var parts = String(version).split('.');
+    return parts.length < 2 ? null : parts[0] + '.' + parts[1];
+  }
+
+  var PUBLISHED_SPEC_MINORS = PUBLISHED_SPEC_VERSIONS.reduce(function (minors, version) {
+    var minor = specMinorOf(version);
+    if (minor && minors.indexOf(minor) === -1) minors.push(minor);
+    return minors;
+  }, []);
+  var LATEST_SPEC_VERSION = PUBLISHED_SPEC_VERSIONS[PUBLISHED_SPEC_VERSIONS.length - 1];
+  var LATEST_SPEC_MINOR = PUBLISHED_SPEC_MINORS[PUBLISHED_SPEC_MINORS.length - 1];
+  var SUPPORTED_SPEC_MINORS = PUBLISHED_SPEC_MINORS.slice(-SUPPORT_WINDOW_MINORS);
+  var SUPPORTED_SPEC_VERSIONS = PUBLISHED_SPEC_VERSIONS.filter(function (version) {
+    return SUPPORTED_SPEC_MINORS.indexOf(specMinorOf(version)) !== -1;
+  });
+
+  function declaredSpecVersion(doc) {
+    return doc && typeof doc.specVersion === 'string' ? doc.specVersion : null;
+  }
+
+  // Numeric compare of two `x.y` minors, so "0.10" sorts above "0.9".
+  function compareSpecMinors(a, b) {
+    var left = String(a).split('.').map(Number);
+    var right = String(b).split('.').map(Number);
+    for (var i = 0; i < 2; i += 1) {
+      if (left[i] !== right[i]) return left[i] - right[i];
+    }
+    return 0;
+  }
+
+  // Statuses share their names with @opentechevents/validate's
+  // classifySpecVersion, with one addition: `future` — a version newer than
+  // anything this build knows. A validator has nothing to check such a
+  // document against, but a reader can still show it and say so, which is
+  // the whole point of reading tolerantly.
+  //
+  // Classification is by minor, not by exact string: a patch release inside a
+  // supported minor does not change the format, so 0.4.1 is as supported as
+  // 0.4.0 even before this build has heard of it.
+  function classifySpecVersion(declared) {
+    if (!declared) return { status: 'unknown', declared: null };
+    var minor = specMinorOf(declared);
+    if (!minor || !/^\d+\.\d+$/.test(minor)) return { status: 'unknown', declared: declared };
+    if (PUBLISHED_SPEC_MINORS.indexOf(minor) !== -1) {
+      if (SUPPORTED_SPEC_MINORS.indexOf(minor) === -1) {
+        return { status: 'out-of-window', version: declared };
+      }
+      return minor === LATEST_SPEC_MINOR
+        ? { status: 'current', version: declared }
+        : { status: 'outdated', version: declared };
+    }
+    return compareSpecMinors(minor, LATEST_SPEC_MINOR) > 0
+      ? { status: 'future', version: declared }
+      : { status: 'unknown', declared: declared };
+  }
+
+  // Null for a feed that has not loaded yet: "no document" is not the same
+  // claim as "a document declaring nothing", and the UI must not say the
+  // second about the first.
+  function specVerdictOf(doc) {
+    return doc ? classifySpecVersion(declaredSpecVersion(doc)) : null;
+  }
+
+  // The sidebar is not the place to tell someone their feed is one release
+  // behind — that is normal. It is the place to flag the two cases where what
+  // the reader shows may be incomplete.
+  function feedSpecTag(feed) {
+    var verdict = specVerdictOf(feedCache.get(feed.url));
+    if (!verdict) return '';
+    if (verdict.status !== 'out-of-window' && verdict.status !== 'future' && verdict.status !== 'unknown') return '';
+    var note = describeSpecVersion(verdict);
+    return note ? note.short : '';
+  }
+
+  // One sentence for the UI about the version a feed declares, or null when
+  // there is nothing worth saying. `tone` is how to show it, never whether to
+  // show the feed: the reader shows the events either way. Being on an older
+  // supported release is a legitimate choice and these messages say so —
+  // none of them asks the publisher to do anything.
+  function describeSpecVersion(verdict) {
+    if (!verdict || verdict.status === 'current') return null;
+    if (verdict.status === 'outdated') {
+      return {
+        tone: 'info',
+        short: 'OTE ' + verdict.version,
+        message: 'Este feed declara OTE ' + verdict.version + ' y se lee con las reglas de '
+          + verdict.version + '. Es una versión soportada; la actual es ' + LATEST_SPEC_VERSION + '.'
+      };
+    }
+    if (verdict.status === 'out-of-window') {
+      return {
+        tone: 'warn',
+        short: 'OTE ' + verdict.version + ' · fuera de la ventana de soporte',
+        message: 'OTE ' + verdict.version + ' queda fuera de la ventana de soporte, que cubre las '
+          + SUPPORT_WINDOW_MINORS + ' últimas versiones (' + SUPPORTED_SPEC_VERSIONS.join(', ')
+          + '). El feed se muestra con las reglas de ' + verdict.version
+          + ', así que lo que ves es correcto; sólo no incluye los campos añadidos después.'
+      };
+    }
+    if (verdict.status === 'future') {
+      return {
+        tone: 'warn',
+        short: 'OTE ' + verdict.version + ' · más reciente que este lector',
+        message: 'Este feed declara OTE ' + verdict.version + ', más reciente que la última versión '
+          + 'que conoce este lector (' + LATEST_SPEC_VERSION + '). Se muestra igualmente: los campos '
+          + 'que el lector no reconoce se ignoran, que es lo que OTE espera de un consumidor.'
+      };
+    }
+    return {
+      tone: 'warn',
+      short: 'specVersion no reconocida',
+      message: verdict.declared === null
+        ? 'Este feed no declara specVersion, así que no hay reglas con las que leerlo. Las versiones '
+          + 'publicadas son ' + PUBLISHED_SPEC_VERSIONS.join(', ') + '.'
+        : '"' + verdict.declared + '" no es una versión publicada de OTE. Las versiones publicadas son '
+          + PUBLISHED_SPEC_VERSIONS.join(', ') + '. El feed se muestra tal cual.'
+    };
+  }
+
+  // What makes a document an OTE document is its shape, not its vintage: a
+  // declared specVersion plus the payload of its kind. The version it declares
+  // decides which rules apply to it, never whether it is OTE — a reader that
+  // conflates the two stops opening every feed published after it shipped.
+  // Unknown fields have always been legal to ignore in OTE, so reading
+  // tolerantly and saying what was read is the correct behaviour here.
   function isOteFeed(doc) {
-    return doc && doc.specVersion === '0.3.0' && Array.isArray(doc.events);
+    return Boolean(doc) && typeof doc === 'object'
+      && typeof doc.specVersion === 'string' && Array.isArray(doc.events);
   }
 
   function isOteEvent(doc) {
-    return doc && doc.specVersion === '0.3.0' && doc.id && doc.name && doc.startDate;
+    return Boolean(doc) && typeof doc === 'object'
+      && typeof doc.specVersion === 'string' && Boolean(doc.id && doc.name && doc.startDate);
   }
 
   function inherit(feed, event) {
     var out = Object.assign({}, event);
-    ['specVersion', 'license', 'textLanguage', 'organizers'].forEach(function (key) {
+    INHERITED_FEED_FIELDS.forEach(function (key) {
       if (out[key] == null && feed[key] != null) out[key] = feed[key];
     });
     out._feedTitle = feed.title || 'Evento suelto';
@@ -489,7 +640,7 @@
         events: [doc]
       };
     }
-    throw new Error('La URL no parece un evento ni un feed OTE v0.3');
+    throw new Error('La URL no parece un evento ni un feed OTE: falta specVersion, o events[] en un feed.');
   }
 
   function discoverInHtml(html, baseUrl) {
@@ -556,7 +707,62 @@
   function renderResults() {
     renderFacets();
     renderLoadStatus();
+    renderSpecNotice();
     renderEvents();
+  }
+
+  // The documents whose spec version the current screen is actually showing.
+  function activeSpecDocs() {
+    if (previewMode) return [{ title: previewMode.doc.title || '', doc: previewMode.doc }];
+    var source = state.activeSource || { type: 'all', id: 'all' };
+    var urls;
+    if (source.type === 'feed') urls = [source.id];
+    else if (source.type === 'category') {
+      var category = findCategory(source.id);
+      urls = category ? category.feedUrls || [] : [];
+    } else urls = state.feeds.map(function (feed) { return feed.url; });
+    return urls.map(function (url) {
+      var doc = feedCache.get(url);
+      if (!doc) return null;
+      var feed = findFeed(url);
+      return { title: (feed && feed.title) || doc.title || url, doc: doc };
+    }).filter(Boolean);
+  }
+
+  // Version notes live here rather than in #messages, which renderEvents
+  // clears on every pass. They are notes: the events are rendered either way,
+  // and nothing in this box is a reason not to read the feed.
+  function renderSpecNotice() {
+    var box = $('spec-notice');
+    if (!box) return;
+    box.replaceChildren();
+    box.classList.remove('is-warn', 'is-info');
+    var docs = activeSpecDocs();
+    var entries = docs.map(function (entry) {
+      return { title: entry.title, note: describeSpecVersion(specVerdictOf(entry.doc)) };
+    }).filter(function (entry) { return entry.note; });
+    // On a screen about one feed, say the whole sentence — the reader asked
+    // about that feed. Across several, keep only what a reader has to know:
+    // being one release behind is legitimate and would otherwise sit in the
+    // way of every session, which is how a note turns into a reproach.
+    if (docs.length > 1) {
+      entries = entries.filter(function (entry) { return entry.note.tone === 'warn'; });
+    }
+    if (!entries.length) {
+      box.hidden = true;
+      return;
+    }
+    var warn = entries.some(function (entry) { return entry.note.tone === 'warn'; });
+    box.classList.add(warn ? 'is-warn' : 'is-info');
+    // Name the feed whenever more than one is on screen: "a feed declares 0.3"
+    // is useless when you cannot tell which one it is.
+    var named = docs.length > 1;
+    entries.forEach(function (entry) {
+      var line = document.createElement('p');
+      line.textContent = named ? entry.title + ' — ' + entry.note.message : entry.note.message;
+      box.appendChild(line);
+    });
+    box.hidden = false;
   }
 
   function renderControls() {
@@ -641,7 +847,7 @@
           if (!feed) return;
           box.appendChild(libraryRow({
             title: feed.title || 'Feed OTE',
-            meta: feed.error || '',
+            meta: feed.error || feedSpecTag(feed),
             count: visibleUnreadCount({ type: 'feed', id: feed.url }),
             active: isActiveSource('feed', feed.url),
             unread: feedHasUnread(feed),
@@ -848,8 +1054,12 @@
     $('options-name').value = feed.title || '';
     $('options-url').value = feed.url || '';
     var errorHint = $('options-error');
+    var note = describeSpecVersion(specVerdictOf(feedCache.get(feed.url)));
     if (feed.status === 'error' && feed.error) {
       errorHint.textContent = 'No se pudo cargar: ' + feed.error + '. Puedes corregir la URL.';
+      errorHint.hidden = false;
+    } else if (note) {
+      errorHint.textContent = note.message;
       errorHint.hidden = false;
     } else {
       errorHint.hidden = true;
