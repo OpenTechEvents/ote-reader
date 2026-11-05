@@ -1,5 +1,27 @@
 # OTE Reader changelog
 
+## 0.11.0 - 2026-11-05
+
+### Fixed
+
+- A saved event disappeared from its collection, without a word, the moment
+  its publisher stopped carrying it in the feed. Collections stored only a
+  `{feedUrl, eventId}` pointer and resolved it against the live feed on every
+  render, so pruning a feed — or simply unsubscribing from it — silently
+  emptied collections of its events, while the pointers stayed in storage
+  aimed at nothing. Collections now hold the event itself.
+
+### Added
+
+- Events whose feed stopped carrying them are marked rather than removed.
+  "Retirado del feed" appears only when the feed actually claims the absence
+  means something — `feed.covers` is the window a feed declares itself
+  complete for, and outside it, or without it, nothing is claimed. Events from
+  a feed you unsubscribed from are marked "Feed no suscrito".
+- A cleanup in Ajustes for saved events that can no longer be followed, with
+  a count and a confirmation. It deliberately does not offer to remove past
+  events: a saved past event is the only history the reader has.
+
 ## 0.10.0 - 2026-11-04
 
 ### Fixed
