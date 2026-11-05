@@ -1,5 +1,29 @@
 # OTE Reader changelog
 
+## 0.10.0 - 2026-11-04
+
+### Fixed
+
+- The reader accepted only `specVersion` `0.3.0`, so three of the four
+  registered OTE feeds — eventos.wiki and Sarao (0.4.0) and CoruñaJUG
+  (0.5.0) — could not be opened at all, and the failure was silent: the
+  document downloaded fine and was simply not recognised as OTE. A document
+  is now recognised by its shape, and the version it declares decides which
+  rules apply to it, never whether it is OTE.
+- Events now inherit `contributing` from their feed alongside `specVersion`,
+  `license`, `textLanguage` and `organizers` — the full set the event schema
+  marks as inherited since 0.5.
+
+### Added
+
+- Spec version notes: a feed on an older supported release says so when you
+  open it, and one outside the support window, newer than this build, or
+  declaring an unpublished version is flagged in the sidebar and above the
+  events. None of them stops the feed from being read.
+- `npm run check` now also verifies the mirrored spec version list and the
+  feed→event inheritance list against the npm registry and the published
+  event schema, so neither drifts silently.
+
 ## 0.9.0 - 2026-08-28
 
 ### Added
