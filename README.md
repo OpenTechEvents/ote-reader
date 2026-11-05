@@ -1,5 +1,16 @@
 # OTE Reader
 
+[![Deploy GitHub Pages](https://github.com/OpenTechEvents/ote-reader/actions/workflows/pages.yml/badge.svg)](https://github.com/OpenTechEvents/ote-reader/actions/workflows/pages.yml)
+[![OTE spec](https://img.shields.io/badge/OTE%20spec-v0.4%20%E2%80%93%20v0.6-2563eb)](#ote-spec-version-support)
+[![Reader](https://img.shields.io/badge/reader-opentechevents.org-2563eb)](https://reader.opentechevents.org)
+![PWA](https://img.shields.io/badge/PWA-offline--first-5b21b6)
+![Build step](https://img.shields.io/badge/build%20step-none-555555)
+![License](https://img.shields.io/badge/license-MIT-339933)
+
+Supported OTE spec minors: **0.4, 0.5, 0.6** — the last three published minors,
+computed at runtime from `PUBLISHED_SPEC_VERSIONS` in `app.js`. Feeds outside
+that window still open; see [OTE spec version support](#ote-spec-version-support).
+
 Attendee-facing MVP for OpenTechEvents feeds.
 
 The first version is a static PWA that lets people:
