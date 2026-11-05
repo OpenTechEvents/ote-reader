@@ -8,7 +8,8 @@ The first version is a static PWA that lets people:
 - discover feeds from pages that expose an OTE `<link rel="alternate">`;
 - filter events by topic, attendance mode, language, country and open CFP;
 - switch between card, RSS-like and calendar views;
-- save filters and events locally;
+- save filters and events locally, keeping a saved event even after its feed
+  stops publishing it;
 - export single events as `.ics`.
 
 ## Relationship with `<ote-events>`
@@ -17,6 +18,26 @@ The embeddable widget at <https://tools.opentechevents.org/embed/> is a good can
 for sharing presentation code with OTE Reader. Today it consumes a `feed` URL directly.
 OTE Reader keeps feeds and filters in memory, so the clean integration point would be a
 future widget API that accepts an already-filtered OTE feed object or event list.
+
+## Saved events
+
+A collection holds the event, not a pointer to it. The reader keeps a copy of
+each event you save, so a publisher pruning their feed cannot empty your
+collection — which is what used to happen, silently.
+
+Whether an event's absence *means* anything is a separate question, and
+`feed.covers` answers it: inside the window a feed declares itself complete
+for, an absent event has been withdrawn and the card is badged as such;
+outside it, or in a feed without `covers`, nothing is claimed and nothing is
+said. Every other absence — the feed is loading, it failed, it returned a
+truncated response — is never presented as a withdrawal.
+
+Nothing is ever deleted on the reader's initiative. Ajustes offers to remove
+only what can no longer be followed at all: events from feeds you have
+unsubscribed, and events their feed says it withdrew. Past events are not on
+that list — a saved past event is the only history the reader has, since the
+feed no longer carries it. To keep them out of the lists, use the "Solo
+futuros" filter, which is a view rather than a deletion.
 
 ## OTE spec version support
 

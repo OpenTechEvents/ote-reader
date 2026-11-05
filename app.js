@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '0.10.1';
+  var APP_VERSION = '0.11.0';
   var DEMO_MODE = new URLSearchParams(location.search).get('demo') === '1' || location.pathname.replace(/\/+$/, '').endsWith('/demo');
   var STORAGE = DEMO_MODE ? 'ote-reader-demo-state-v1' : 'ote-reader-state-v1';
   var INSTALL_DISMISSED = 'ote-reader-install-dismissed-v1';
@@ -332,6 +332,7 @@
         deleteCachedFeed(feed.url);
       }
     }));
+    backfillBoardSnapshots();
     persist();
   }
 
@@ -610,6 +611,7 @@
       feed.updatedAt = result.doc.updatedAt || '';
       feedCache.set(feed.url, result.doc);
       writeCachedFeed(feed.url, result.doc);
+      backfillBoardSnapshots();
     } catch (error) {
       if (feedCache.has(feed.url)) {
         feed.status = 'ok';
@@ -1406,18 +1408,124 @@
     return a && b && a.feedUrl === b.feedUrl && a.eventId === b.eventId;
   }
 
+  function refKey(ref) {
+    return String(ref.feedUrl) + '\n' + String(ref.eventId);
+  }
+
+  // A saved event used to be a pointer — {feedUrl, eventId} resolved against
+  // the live feed on every render — so the day a publisher stopped carrying
+  // it, it left the collection without a word and the pointer stayed behind
+  // in storage, aimed at nothing. A collection is the reader's, not the
+  // publisher's, so what gets saved is the event itself. The feed is then
+  // free to drop it: the card stays, and whether that absence *means*
+  // anything is a separate question, answered below by `covers`.
+  function savedRef(event) {
+    return {
+      feedUrl: event._feedUrl,
+      eventId: event.id,
+      savedAt: new Date().toISOString(),
+      event: snapshotOf(event)
+    };
+  }
+
+  function snapshotOf(event) {
+    var copy = Object.assign({}, event);
+    delete copy._fromSnapshot;
+    delete copy._withdrawn;
+    delete copy._orphan;
+    delete copy._savedAt;
+    return copy;
+  }
+
   function boardHasEvent(board, event) {
     var ref = eventRef(event);
     return Boolean(board && (board.eventRefs || []).some(function (item) { return sameRef(item, ref); }));
   }
 
+  // The live event when the feed still carries it — it may have been edited
+  // since, and the current truth wins — otherwise what was saved.
   function boardEvents(board) {
     if (!board) return [];
-    var refs = board.eventRefs || [];
-    return allEvents().filter(function (event) {
-      var ref = eventRef(event);
-      return refs.some(function (item) { return sameRef(item, ref); });
+    var live = new Map();
+    allEvents().forEach(function (event) { live.set(refKey(eventRef(event)), event); });
+    return (board.eventRefs || []).map(function (ref) {
+      return live.get(refKey(ref)) || snapshotEvent(ref);
+    }).filter(Boolean);
+  }
+
+  function snapshotEvent(ref) {
+    if (!ref || !ref.event) return null;
+    var event = Object.assign({}, ref.event);
+    event._fromSnapshot = true;
+    event._savedAt = ref.savedAt || '';
+    if (!findFeed(ref.feedUrl)) event._orphan = true;
+    else if (feedWithdrew(ref)) event._withdrawn = true;
+    return event;
+  }
+
+  // Whether a feed is actually *claiming* this event is gone. `covers` is the
+  // window a feed says it is complete for: inside it, an absent event has
+  // been withdrawn; outside it the feed asserts nothing, and a feed without
+  // `covers` asserts nothing at all. Every other absence — the feed is still
+  // loading, it failed, it returned a truncated response, the publisher
+  // recycled an id — is not a claim about anything and must not be shown as
+  // one.
+  function feedWithdrew(ref) {
+    var feed = findFeed(ref.feedUrl);
+    if (!feed || feed.status !== 'ok') return false;
+    var doc = feedCache.get(ref.feedUrl);
+    if (!doc || !doc.covers) return false;
+    return coversIncludes(doc.covers, (ref.event || {}).startDate);
+  }
+
+  // ISO dates compare correctly as strings, and `to` is inclusive — the same
+  // convention as an all-day endDate.
+  function coversIncludes(covers, startDate) {
+    if (!startDate || (!covers.from && !covers.to)) return false;
+    var day = String(startDate).slice(0, 10);
+    if (covers.from && day < covers.from) return false;
+    if (covers.to && day > covers.to) return false;
+    return true;
+  }
+
+  // Collections saved before snapshots existed are pointers. Fill them in
+  // from the live feed as it loads, so they stop being destructible by a
+  // publisher's next prune. A pointer whose event is already gone cannot be
+  // recovered; it stays as it is and the cleanup in Ajustes can clear it.
+  function backfillBoardSnapshots() {
+    var live = new Map();
+    allEvents().forEach(function (event) { live.set(refKey(eventRef(event)), event); });
+    var changed = false;
+    state.boards.forEach(function (board) {
+      (board.eventRefs || []).forEach(function (ref) {
+        if (ref.event) return;
+        var current = live.get(refKey(ref));
+        if (!current) return;
+        ref.event = snapshotOf(current);
+        changed = true;
+      });
     });
+    if (changed) persist();
+  }
+
+  // Saved events that can no longer be followed, for the cleanup in Ajustes:
+  // the feed is no longer subscribed, the feed says it withdrew them, or they
+  // are pointers from before snapshots with nothing left to point at.
+  function staleBoardRefs() {
+    var live = new Map();
+    allEvents().forEach(function (event) { live.set(refKey(eventRef(event)), event); });
+    var orphan = [];
+    var withdrawn = [];
+    var broken = [];
+    state.boards.forEach(function (board) {
+      (board.eventRefs || []).forEach(function (ref) {
+        if (live.has(refKey(ref))) return;
+        if (!ref.event) broken.push({ board: board, ref: ref });
+        else if (!findFeed(ref.feedUrl)) orphan.push({ board: board, ref: ref });
+        else if (feedWithdrew(ref)) withdrawn.push({ board: board, ref: ref });
+      });
+    });
+    return { orphan: orphan, withdrawn: withdrawn, broken: broken };
   }
 
   function createBoard(name) {
@@ -1716,6 +1824,11 @@
       if (!event) return [];
       var badges = [];
       if (event.status === 'cancelled') badges.push({ label: 'Cancelado', tone: 'warning' });
+      // Only ever shown on a saved event the feed stopped carrying. Absence
+      // on its own says nothing (see feedWithdrew); these are the two cases
+      // where it says something.
+      if (event._orphan) badges.push({ label: 'Feed no suscrito', tone: 'default' });
+      else if (event._withdrawn) badges.push({ label: 'Retirado del feed', tone: 'warning' });
       return badges;
     };
   }
@@ -1807,7 +1920,17 @@
 
   function currentBoardEvent() {
     if (!boardEventContext) return null;
-    return allEvents().find(function (event) { return sameRef(eventRef(event), boardEventContext); }) || null;
+    var live = allEvents().find(function (event) { return sameRef(eventRef(event), boardEventContext); });
+    if (live) return live;
+    // Fall back to what was saved: an event its feed no longer carries must
+    // still be removable from the collection holding it.
+    var saved = null;
+    state.boards.forEach(function (board) {
+      (board.eventRefs || []).forEach(function (ref) {
+        if (!saved && ref.event && sameRef(ref, boardEventContext)) saved = snapshotEvent(ref);
+      });
+    });
+    return saved;
   }
 
   function saveBoardPicker() {
@@ -1818,7 +1941,7 @@
     state.boards.forEach(function (board) {
       var has = board.eventRefs.some(function (item) { return sameRef(item, ref); });
       var wants = checked.indexOf(board.id) !== -1;
-      if (wants && !has) board.eventRefs.push(ref);
+      if (wants && !has) board.eventRefs.push(savedRef(event));
       if (!wants && has) board.eventRefs = board.eventRefs.filter(function (item) { return !sameRef(item, ref); });
     });
     persist();
@@ -2270,8 +2393,80 @@
 
   function openModal(id) {
     var modal = $(id);
+    if (id === 'help-modal') renderCollectionsSettings();
     if (modal.showModal) modal.showModal();
     else modal.setAttribute('open', '');
+  }
+
+  function savedEventCount() {
+    return state.boards.reduce(function (sum, board) {
+      return sum + (board.eventRefs || []).length;
+    }, 0);
+  }
+
+  // Deliberately not a "remove past events" button. A saved past event is the
+  // only history this reader has — its feed no longer carries it — and it is
+  // the one a reader asked for by name. Hiding past events from lists is what
+  // the "Solo futuros" filter is for; that is a view, not a deletion. What
+  // this offers to remove is only what can no longer be followed at all.
+  function renderCollectionsSettings() {
+    var summary = $('collections-summary');
+    var button = $('clean-collections');
+    if (!summary || !button) return;
+    var stale = staleBoardRefs();
+    var removable = stale.orphan.length + stale.withdrawn.length + stale.broken.length;
+    var total = savedEventCount();
+    if (!total) {
+      summary.textContent = 'Todavía no has guardado ningún evento.';
+      button.hidden = true;
+      return;
+    }
+    var noun = total === 1 ? '1 evento guardado' : total + ' eventos guardados';
+    if (!removable) {
+      summary.textContent = noun + '. Todos se pueden seguir en sus feeds.';
+      button.hidden = true;
+      return;
+    }
+    var parts = [];
+    if (stale.orphan.length) {
+      parts.push(stale.orphan.length + (stale.orphan.length === 1
+        ? ' de un feed que ya no sigues' : ' de feeds que ya no sigues'));
+    }
+    if (stale.withdrawn.length) {
+      parts.push(stale.withdrawn.length + (stale.withdrawn.length === 1
+        ? ' retirado por su feed' : ' retirados por su feed'));
+    }
+    if (stale.broken.length) {
+      parts.push(stale.broken.length + (stale.broken.length === 1
+        ? ' guardado antes de que se conservara su contenido'
+        : ' guardados antes de que se conservara su contenido'));
+    }
+    summary.textContent = noun + ', de los cuales ' + parts.join(', ') + '.';
+    button.hidden = false;
+    button.textContent = removable === 1
+      ? 'Quitar 1 evento que ya no se puede seguir'
+      : 'Quitar ' + removable + ' eventos que ya no se pueden seguir';
+  }
+
+  function cleanCollections() {
+    var stale = staleBoardRefs();
+    var entries = stale.orphan.concat(stale.withdrawn, stale.broken);
+    if (!entries.length) return;
+    var question = entries.length === 1
+      ? 'Quitar 1 evento de tus colecciones? No se puede deshacer.'
+      : 'Quitar ' + entries.length + ' eventos de tus colecciones? No se puede deshacer.';
+    if (!confirm(question)) return;
+    entries.forEach(function (entry) {
+      entry.board.eventRefs = entry.board.eventRefs.filter(function (item) {
+        return item !== entry.ref;
+      });
+    });
+    persist();
+    renderCollectionsSettings();
+    render();
+    showMessage(entries.length === 1
+      ? 'Se quitó 1 evento de tus colecciones.'
+      : 'Se quitaron ' + entries.length + ' eventos de tus colecciones.', '', true);
   }
 
   function closeModal(id) {
@@ -2402,6 +2597,7 @@
     });
     $('install-bar-button').addEventListener('click', promptInstall);
     $('install-help-button').addEventListener('click', promptInstall);
+    $('clean-collections').addEventListener('click', cleanCollections);
     $('install-dismiss').addEventListener('click', function () {
       try { localStorage.setItem(INSTALL_DISMISSED, '1'); } catch (e) { /* storage unavailable */ }
       updateInstallUi();
