@@ -22,6 +22,18 @@
   a count and a confirmation. It deliberately does not offer to remove past
   events: a saved past event is the only history the reader has.
 
+## 0.10.1 - 2026-11-05
+
+### Changed
+
+- Updated the pinned `<ote-events>` build from v0.6.0 to v0.8.2. The widget
+  API the reader uses is unchanged; what it brings is a `dompurify` security
+  bump on the path every feed-supplied string takes to the DOM, non-ASCII
+  `id`s and URLs surviving the render path unencoded, and an `http://` image
+  on this `https` page falling back to the placeholder instead of leaving a
+  broken frame. Verified in a browser against the four registered feeds in
+  all three views.
+
 ## 0.10.0 - 2026-11-04
 
 ### Fixed
